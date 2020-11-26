@@ -255,10 +255,10 @@ func parseReplay(row []string) (Replay, error) {
 	rp.When, err = time.Parse(timePattern, row[1])
 	rp.Starts, err = time.Parse(timePattern, row[2])
 	rp.Ends, err = time.Parse(timePattern, row[3])
-	rp.Status = row[4]
-	rp.Priority, err = strconv.Atoi(row[5])
-	rp.Comment = row[6]
-	rp.Pass, err = strconv.Atoi(row[7])
+	rp.Priority, err = strconv.Atoi(row[4])
+	rp.Comment = row[5]
+	rp.Status = row[6]
+	rp.Automatic, err = strconv.ParseBool(row[7])
 
 	return rp, err
 }

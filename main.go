@@ -55,12 +55,13 @@ type GapStore interface {
 }
 
 type Replay struct {
-	Id       int       `json:"id"`
-	Status   string    `json:"status"`
-	Priority int       `json:"priority"`
-	When     time.Time `json:"time"`
-	Comment  string    `json:"comment"`
-	Pass     int       `json:"pass"`
+	Id        int       `json:"id"`
+	Status    string    `json:"status"`
+	Priority  int       `json:"priority"`
+	When      time.Time `json:"time"`
+	Comment   string    `json:"comment"`
+	Pass      int       `json:"pass"`
+	Automatic bool      `json:"automatic"`
 	Period
 }
 
@@ -115,7 +116,11 @@ func main() {
 	conf := struct {
 		Addr  string
 		Quiet bool
-		DB    struct {
+		Mon   struct {
+			Pid  string `toml:"pidfile"`
+			Proc string `toml:"proc"`
+		} `toml:"autobrm"`
+		DB struct {
 			Name   string `toml:"database"`
 			Addr   string
 			User   string
