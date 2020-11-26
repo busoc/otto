@@ -41,7 +41,13 @@ type VMUGap struct {
 	UPI    string `json:"record"`
 }
 
+type RecordInfo struct {
+	UPI   string `json:"record"`
+	Count int    `json:"count"`
+}
+
 type GapStore interface {
+	FetchRecords() ([]RecordInfo, error)
 	FetchGapsHRD(time.Time, time.Time, string) ([]HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
 	FetchGapsVMU(time.Time, time.Time, string) ([]VMUGap, error)
@@ -58,7 +64,13 @@ type Replay struct {
 	Period
 }
 
+type StatusInfo struct {
+	Name  string `json:"name"`
+	Count int    `json:"int"`
+}
+
 type ReplayStore interface {
+	FetchStatus() ([]StatusInfo, error)
 	FetchReplays(time.Time, time.Time, string) ([]Replay, error)
 	FetchReplayDetail(int) (Replay, error)
 	CancelReplay(int) error
@@ -152,6 +164,11 @@ func setupRoutes(db Store, origins []string) http.Handler {
 			Methods: []string{http.MethodGet},
 		},
 		{
+			URL:     "/requests/status/",
+			Do:      listRegisteredStatus(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
 			URL:     "/requests/",
 			Do:      registerRequest(db),
 			Methods: []string{http.MethodPost},
@@ -174,6 +191,11 @@ func setupRoutes(db Store, origins []string) http.Handler {
 		{
 			URL:     "/archives/vmu/gaps/",
 			Do:      listGapsVMU(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
+			URL:     "/archives/vmu/records/",
+			Do:      listRecordsVMU(db),
 			Methods: []string{http.MethodGet},
 		},
 		{
@@ -280,6 +302,12 @@ func listRequests(db ReplayStore) Handler {
 	}
 }
 
+func listRegisteredStatus(db ReplayStore) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		return db.FetchStatus()
+	}
+}
+
 func showRequest(db ReplayStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
 		id, err := parseInt(r, fieldId)
@@ -343,6 +371,12 @@ func showGapVMU(db GapStore) Handler {
 			return nil, fmt.Errorf("%w: %s", ErrQuery)
 		}
 		return db.FetchGapDetailVMU(id)
+	}
+}
+
+func listRecordsVMU(db GapStore) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		return db.FetchRecords()
 	}
 }
 

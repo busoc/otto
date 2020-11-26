@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -47,6 +48,21 @@ func (s FileStore) Status() (interface{}, error) {
 		},
 	}
 	return stats, nil
+}
+
+func (s FileStore) FetchStatus() ([]StatusInfo, error) {
+	var rs []StatusInfo
+	return rs, s.readFile("replay", func(row []string) error {
+		x := sort.Search(len(rs), func(i int) bool {
+			return rs[i].Name >= row[4]
+		})
+		if x >= len(rs) {
+			s := StatusInfo{Name: row[4]}
+			rs = append(rs, s)
+		}
+		rs[x].Count++
+		return nil
+	})
 }
 
 func (s FileStore) FetchReplays(start time.Time, end time.Time, status string) ([]Replay, error) {
@@ -121,6 +137,21 @@ func (s FileStore) FetchGapsVMU(start time.Time, end time.Time, record string) (
 func (s FileStore) FetchGapDetailVMU(id int) (VMUGap, error) {
 	var v VMUGap
 	return v, ErrImpl
+}
+
+func (s FileStore) FetchRecords() ([]RecordInfo, error) {
+	var rs []RecordInfo
+	return rs, s.readFile("vmugap", func(row []string) error {
+		x := sort.Search(len(rs), func(i int) bool {
+			return rs[i].UPI >= row[7]
+		})
+		if x >= len(rs) {
+			r := RecordInfo{UPI: row[7]}
+			rs = append(rs, r)
+		}
+		rs[x].Count++
+		return nil
+	})
 }
 
 func (s FileStore) FetchVariables() ([]Variable, error) {

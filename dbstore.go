@@ -13,7 +13,7 @@ type DBStore struct {
 }
 
 func NewDBStore(addr, name, user, passwd string) (Store, error) {
-	addr = fmt.Sprintf("%s:%s@%s/%s", user, passwd, addr, name)
+	addr = fmt.Sprintf("%s:%s@%s/%s?parseTime=true", user, passwd, addr, name)
 	db, err := sql.Open("mysql", addr)
 	if err != nil {
 		return nil, err
@@ -25,6 +25,10 @@ func NewDBStore(addr, name, user, passwd string) (Store, error) {
 }
 
 func (s DBStore) Status() (interface{}, error) {
+	return nil, ErrImpl
+}
+
+func (s DBStore) FetchStatus() ([]StatusInfo, error) {
 	return nil, ErrImpl
 }
 
@@ -66,6 +70,10 @@ func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record string) ([]
 func (s DBStore) FetchGapDetailVMU(id int) (VMUGap, error) {
 	var v VMUGap
 	return v, ErrImpl
+}
+
+func (s DBStore) FetchRecords() ([]RecordInfo, error) {
+	return nil, ErrImpl
 }
 
 func (s DBStore) FetchVariables() ([]Variable, error) {
