@@ -54,11 +54,14 @@ func (s FileStore) FetchStatus() ([]StatusInfo, error) {
 	var rs []StatusInfo
 	return rs, s.readFile("replay", func(row []string) error {
 		x := sort.Search(len(rs), func(i int) bool {
-			return rs[i].Name >= row[4]
+			return rs[i].Name >= row[6]
 		})
-		if x >= len(rs) {
-			s := StatusInfo{Name: row[4]}
+		if x >= len(rs) || rs[x].Name != row[6] {
+			s := StatusInfo{Name: row[6]}
 			rs = append(rs, s)
+			sort.Slice(rs, func(i, j int) bool {
+				return rs[i].Name < rs[j].Name
+			})
 		}
 		rs[x].Count++
 		return nil
