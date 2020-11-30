@@ -21,6 +21,13 @@ type Period struct {
 	Ends   time.Time `json:"dtend"`
 }
 
+func (p Period) isValid() bool {
+	if p.Starts.IsZero() || p.Ends.IsZero() {
+		return false
+	}
+	return p.Starts.Equal(p.Ends) || p.Starts.Before(p.Ends)
+}
+
 type Gap struct {
 	Id    int       `json:"id"`
 	When  time.Time `json:"time"`
@@ -66,8 +73,10 @@ type Replay struct {
 }
 
 type StatusInfo struct {
+	Id    int    `json:"id"`
 	Name  string `json:"name"`
-	Count int    `json:"int"`
+	Count int    `json:"count"`
+	Order int    `json:"order"`
 }
 
 type ReplayStore interface {

@@ -1,7 +1,14 @@
 select * from variable;
 
 select
-  r.id, r.timestamp, r.startdate, r.enddate, coalesce(r.priority, -1) as priority, coalesce(j.text, "") as comment, s.name as status, !isnull(g.replay_id) as automatic
+  r.id,
+  r.timestamp,
+  r.startdate,
+  r.enddate,
+  coalesce(r.priority, -1) as priority,
+  coalesce(j.text, "") as comment,
+  s.name as status,
+  !isnull(g.replay_id) as automatic
 from
   replay as r
   join replay_job as j on r.id=j.replay_id
