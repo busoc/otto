@@ -39,7 +39,7 @@ func (s DBStore) FetchStatus() ([]StatusInfo, error) {
 	var vs []StatusInfo
 	return vs, s.query(q, func(rows *sql.Rows) error {
 		var (
-			s StatusInfo
+			s   StatusInfo
 			err error
 		)
 		if err = rows.Scan(&s.Id, &s.Name, &s.Order, &s.Count); err == nil {
@@ -101,7 +101,7 @@ func (s DBStore) UpdateReplay(id int, priority int) (Replay, error) {
 
 func (s DBStore) RegisterReplay(r Replay) (Replay, error) {
 	if !r.isValid() {
-		return fmt.Errorf("invalid period")
+		return r, fmt.Errorf("%w: invalid period", ErrQuery)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -146,13 +146,13 @@ func (s DBStore) registerReplay(tx *sql.Tx, r *Replay) error {
 }
 
 func (s DBStore) registerReplayJob(tx *sql.Tx, r *Replay) error {
-	get, err := prepareRetrInitialStatus()
+	get, err := prepareRetrInitialStatus("id")
 	if err != nil {
 		return err
 	}
 	options := []quel.InsertOption{
 		quel.InsertColumns("timestamp", "text", "replay_id", "replay_status_id"),
-		quel.InsertValues(quel.Now(), quel.Arg("comment", r.Comment), quel.Arg("replay", r.Id), getq),
+		quel.InsertValues(quel.Now(), quel.Arg("comment", r.Comment), quel.Arg("replay", r.Id), get),
 	}
 	i, err := quel.NewInsert("replay_job", options...)
 	if err == nil {
@@ -161,13 +161,14 @@ func (s DBStore) registerReplayJob(tx *sql.Tx, r *Replay) error {
 	return err
 }
 
-func prepareRetrInitialStatus() (Select, error) {
+func prepareRetrInitialStatus(field string) (quel.Select, error) {
 	var (
-		min = quel.Min(quel.NewIdent("workflow"))
-		where = quel.NewSelect("replay_status", quel.SelectColumn(min))
-		options = []quel.SelectOption{
-			quel.SelectColumn(quel.NewIdent("id")),
-			quel.SelectWhere(quel.Equal(quel.NewIdent("workflow"), minq)),
+		min      = quel.Min(quel.NewIdent("workflow"))
+		where, _ = quel.NewSelect("replay_status", quel.SelectColumn(min))
+		options  = []quel.SelectOption{
+			quel.SelectColumn(quel.NewIdent(field)),
+			quel.SelectWhere(quel.Equal(quel.NewIdent("workflow"), where)),
+			quel.SelectLimit(1),
 		}
 	)
 	return quel.NewSelect("replay_status", options...)
@@ -203,7 +204,7 @@ func (s DBStore) FetchVariables() ([]Variable, error) {
 	var vs []Variable
 	return vs, s.query(q, func(rows *sql.Rows) error {
 		var (
-			v Variable
+			v   Variable
 			err error
 		)
 		if err = rows.Scan(&v.Id, &v.Name, &v.Value); err == nil {
