@@ -43,4 +43,9 @@ SELECT
 FROM replay AS r
   INNER JOIN (SELECT id, replay_id, MAX(replay_status_id) AS replay_status_id, text FROM replay_job GROUP BY replay_id) AS j ON r.id = j.replay_id
   INNER JOIN replay_status AS s ON s.id = j.replay_status_id
-  LEFT OUTER JOIN (SELECT DISTINCT replay_id FROM gap_replay_list) AS g ON r.id = g.replay_id 
+  LEFT OUTER JOIN (SELECT DISTINCT replay_id FROM gap_replay_list) AS g ON r.id = g.replay_id
+
+  select r.source, sum(g.total)
+  from vmu_record as r
+  join (select count(vmu_record_id) as total, vmu_record_id from vmu_packet_gap group by vmu_record_id) as g on r.id=g.vmu_record_id
+  group by r.source

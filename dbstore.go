@@ -68,9 +68,9 @@ func (s DBStore) normalizeInterval(start, end time.Time, table, column string) (
 func (s DBStore) retrInterval(table, column string) (time.Time, time.Time, error) {
 	var (
 		dtstart time.Time
-		dtend time.Time
-		max = quel.Max(quel.NewIdent(column))
-		min = quel.Func("DATE_SUB", max, quel.Raw("INTERVAL 2 DAY"))
+		dtend   time.Time
+		max     = quel.Max(quel.NewIdent(column))
+		min     = quel.Func("DATE_SUB", max, quel.Days(3))
 		options = []quel.SelectOption{
 			quel.SelectColumn(min),
 			quel.SelectColumn(max),
@@ -377,6 +377,30 @@ func prepareRetrInitialStatus(field string) (quel.Select, error) {
 	return quel.NewSelect("replay_status", options...)
 }
 
+func (s DBStore) FetchChannels() ([]ChannelInfo, error) {
+	ident := quel.NewIdent("chanel")
+	options := []quel.SelectOption{
+		quel.SelectColumn(ident),
+		quel.SelectColumn(quel.Count(ident)),
+		quel.SelectGroupBy(ident),
+	}
+	q, err := quel.NewSelect("hrd_packet_gap", options...)
+	if err != nil {
+		return nil, err
+	}
+	var vs []ChannelInfo
+	return vs, s.query(q, func(rows *sql.Rows) error {
+		var (
+			c   ChannelInfo
+			err error
+		)
+		if err = rows.Scan(&c.Channel, &c.Count); err == nil {
+			vs = append(vs, c)
+		}
+		return err
+	})
+}
+
 func (s DBStore) FetchGapsHRD(start time.Time, end time.Time, channel string) ([]HRDGap, error) {
 	start, end, err := s.normalizeInterval(start, end, "hrd_packet_gap", "last_timestamp")
 	if err != nil {
@@ -495,6 +519,48 @@ func (s DBStore) FetchGapDetailVMU(id int) (VMUGap, error) {
 	return v, ErrImpl
 }
 
+func (s DBStore) FetchSources() ([]SourceInfo, error) {
+	options := []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("vmu_record_id")),
+		quel.SelectColumn(quel.Alias("total", quel.Count(quel.NewIdent("vmu_record_id")))),
+		quel.SelectGroupBy(quel.NewIdent("vmu_record_id")),
+	}
+	sub, err := quel.NewSelect("vmu_packet_gap", options...)
+	if err != nil {
+		return nil, err
+	}
+
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("source", "r")),
+		quel.SelectAlias("r"),
+	}
+	q, err := quel.NewSelect("vmu_record", options...)
+	if err != nil {
+		return nil, err
+	}
+	cdt := quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("vmu_record_id", "g"))
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.Sum(quel.NewIdent("total", "g"))),
+		quel.SelectWhere(quel.IsNotNullTest(quel.NewIdent("source", "r"))),
+		quel.SelectGroupBy(quel.NewIdent("source", "r")),
+	}
+	q, err = q.LeftInnerJoin(quel.Alias("g", sub), cdt, options...)
+	if err != nil {
+		return nil, err
+	}
+	var rs []SourceInfo
+	return rs, s.query(q, func(rows *sql.Rows) error {
+		var (
+			r   SourceInfo
+			err error
+		)
+		if err = rows.Scan(&r.Source, &r.Count); err == nil {
+			rs = append(rs, r)
+		}
+		return err
+	})
+}
+
 func (s DBStore) FetchRecords() ([]RecordInfo, error) {
 	options := []quel.SelectOption{
 		quel.SelectColumn(quel.NewIdent("vmu_record_id")),
@@ -525,9 +591,9 @@ func (s DBStore) FetchRecords() ([]RecordInfo, error) {
 		return nil, err
 	}
 	var rs []RecordInfo
-	return rs, s.query(q, func(rows *sql.Rows) error{
+	return rs, s.query(q, func(rows *sql.Rows) error {
 		var (
-			r RecordInfo
+			r   RecordInfo
 			err error
 		)
 		if err = rows.Scan(&r.UPI, &r.Count); err == nil {

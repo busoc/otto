@@ -121,6 +121,10 @@ func (s FileStore) FetchGapsHRD(start time.Time, end time.Time, channel string) 
 	})
 }
 
+func (s FileStore) FetchChannels() ([]ChannelInfo, error) {
+	return nil, ErrImpl
+}
+
 func (s FileStore) FetchGapDetailHRD(id int) (HRDGap, error) {
 	var h HRDGap
 	return h, ErrImpl
@@ -155,6 +159,10 @@ func (s FileStore) FetchRecords() ([]RecordInfo, error) {
 		rs[x].Count++
 		return nil
 	})
+}
+
+func (s FileStore) FetchSources() ([]SourceInfo, error) {
+	return nil, ErrImpl
 }
 
 func (s FileStore) FetchVariables() ([]Variable, error) {

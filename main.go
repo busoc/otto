@@ -53,8 +53,20 @@ type RecordInfo struct {
 	Count int    `json:"count"`
 }
 
+type SourceInfo struct {
+	Source int `json:"source"`
+	Count  int `json:"count"`
+}
+
+type ChannelInfo struct {
+	Channel string `json:"source"`
+	Count   int    `json:"count"`
+}
+
 type GapStore interface {
 	FetchRecords() ([]RecordInfo, error)
+	FetchSources() ([]SourceInfo, error)
+	FetchChannels() ([]ChannelInfo, error)
 	FetchGapsHRD(time.Time, time.Time, string) ([]HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
 	FetchGapsVMU(time.Time, time.Time, string) ([]VMUGap, error)
@@ -214,6 +226,11 @@ func setupRoutes(db Store, origins []string) http.Handler {
 			Methods: []string{http.MethodGet},
 		},
 		{
+			URL:     "/archives/vmu/sources/",
+			Do:      listSourcesVMU(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
 			URL:     "/archives/vmu/gaps/{id}",
 			Do:      showGapVMU(db),
 			Methods: []string{http.MethodGet},
@@ -221,6 +238,11 @@ func setupRoutes(db Store, origins []string) http.Handler {
 		{
 			URL:     "/archives/hrd/gaps/",
 			Do:      listGapsHRD(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
+			URL:     "/archives/hrd/channels/",
+			Do:      listChannelsHRD(db),
 			Methods: []string{http.MethodGet},
 		},
 		{
@@ -402,6 +424,12 @@ func listRecordsVMU(db GapStore) Handler {
 	}
 }
 
+func listSourcesVMU(db GapStore) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		return db.FetchSources()
+	}
+}
+
 func listGapsHRD(db GapStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
 		start, end, err := parsePeriod(r)
@@ -409,6 +437,12 @@ func listGapsHRD(db GapStore) Handler {
 			return nil, fmt.Errorf("%w: err", ErrQuery, err)
 		}
 		return db.FetchGapsHRD(start, end, r.URL.Query().Get(fieldChannel))
+	}
+}
+
+func listChannelsHRD(db GapStore) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		return db.FetchChannels()
 	}
 }
 
