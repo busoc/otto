@@ -249,7 +249,14 @@ func setupRoutes(db Store, origins []string) http.Handler {
 		next := wrapHandler(route.Do)
 		r.Handle(route.URL, next).Methods(route.Methods...).Headers("Accept", "application/json")
 	}
-	return handlers.CORS(handlers.AllowedOrigins(origins))(r)
+	methods := []string{
+		http.MethodGet,
+		http.MethodOptions,
+		http.MethodDelete,
+		http.MethodPut,
+		http.MethodPost,
+	}
+	return handlers.CORS(handlers.AllowedOrigins(origins), handlers.AllowedMethods(methods))(r)
 }
 
 func setupStore(addr, user, passwd, name string) (Store, error) {
