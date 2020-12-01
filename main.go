@@ -89,10 +89,11 @@ type ReplayStore interface {
 }
 
 type Variable struct {
-	Id    int      `json:fieldId`
-	Name  string   `json:"name"`
-	Value string   `json:"value"`
-	Range []string `json:"range"`
+	Id        int      `json:"id"`
+	Name      string   `json:"name"`
+	Value     string   `json:"value"`
+	Range     []string `json:"range"`
+	Hazardous bool     `json:"hazardous"`
 }
 
 type ConfigStore interface {
