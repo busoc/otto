@@ -468,7 +468,7 @@ func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record string) ([]
 
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.NewIdent("source", "r")),
-		quel.SelectColumn(quel.NewIdent("phase", "r")),
+		quel.SelectColumn(quel.Coalesce(quel.NewIdent("phase", "r"), quel.NewLiteral(""))),
 		quel.SelectWhere(where),
 	}
 	cdt := quel.Equal(quel.NewIdent("vmu_record_id", "g"), quel.NewIdent("id", "r"))
@@ -516,8 +516,9 @@ func (s DBStore) FetchRecords() ([]RecordInfo, error) {
 	}
 	cdt := quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("vmu_record_id", "g"))
 	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("total", "g")),
+		quel.SelectColumn(quel.Sum(quel.NewIdent("total", "g"))),
 		quel.SelectWhere(quel.IsNotNullTest(quel.NewIdent("phase", "r"))),
+		quel.SelectGroupBy(quel.NewIdent("phase", "r")),
 	}
 	q, err = q.LeftInnerJoin(quel.Alias("g", sub), cdt, options...)
 	if err != nil {
