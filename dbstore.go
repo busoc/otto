@@ -496,7 +496,44 @@ func (s DBStore) FetchGapDetailVMU(id int) (VMUGap, error) {
 }
 
 func (s DBStore) FetchRecords() ([]RecordInfo, error) {
-	return nil, ErrImpl
+	options := []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("vmu_record_id")),
+		quel.SelectColumn(quel.Alias("total", quel.Count(quel.NewIdent("vmu_record_id")))),
+		quel.SelectGroupBy(quel.NewIdent("vmu_record_id")),
+	}
+	sub, err := quel.NewSelect("vmu_packet_gap", options...)
+	if err != nil {
+		return nil, err
+	}
+
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("phase", "r")),
+		quel.SelectAlias("r"),
+	}
+	q, err := quel.NewSelect("vmu_record", options...)
+	if err != nil {
+		return nil, err
+	}
+	cdt := quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("vmu_record_id", "g"))
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("total", "g")),
+		quel.SelectWhere(quel.IsNotNullTest(quel.NewIdent("phase", "r"))),
+	}
+	q, err = q.LeftInnerJoin(quel.Alias("g", sub), cdt, options...)
+	if err != nil {
+		return nil, err
+	}
+	var rs []RecordInfo
+	return rs, s.query(q, func(rows *sql.Rows) error{
+		var (
+			r RecordInfo
+			err error
+		)
+		if err = rows.Scan(&r.UPI, &r.Count); err == nil {
+			rs = append(rs, r)
+		}
+		return err
+	})
 }
 
 func (s DBStore) FetchVariables() ([]Variable, error) {
@@ -591,6 +628,7 @@ func (s DBStore) query(q quel.SQLer, scan func(rows *sql.Rows) error) error {
 	defer rows.Close()
 	for rows.Next() {
 		if err := scan(rows); err != nil {
+			fmt.Println(err)
 			return err
 		}
 	}
