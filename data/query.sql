@@ -37,3 +37,10 @@ select
 from
   vmu_packet_gap as g
   join vmu_record as r on g.vmu_record_id=r.id
+
+SELECT
+  r.id, r.timestamp, r.startdate, r.enddate, COALESCE(r.priority, -1), COALESCE(j.text, ''), s.name, ISNULL(g.replay_id)
+FROM replay AS r
+  INNER JOIN (SELECT id, replay_id, MAX(replay_status_id) AS replay_status_id, text FROM replay_job GROUP BY replay_id) AS j ON r.id = j.replay_id
+  INNER JOIN replay_status AS s ON s.id = j.replay_status_id
+  LEFT OUTER JOIN (SELECT DISTINCT replay_id FROM gap_replay_list) AS g ON r.id = g.replay_id 

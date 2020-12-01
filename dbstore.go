@@ -210,11 +210,24 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("id")),
+		quel.SelectColumn(quel.NewIdent("replay_id")),
+		quel.SelectColumn(quel.Alias("replay_status_id", quel.Max(quel.NewIdent("replay_status_id")))),
+		quel.SelectColumn(quel.NewIdent("text")),
+		quel.SelectGroupBy(quel.NewIdent("replay_id")),
+	}
+	jobs, err := quel.NewSelect("replay_job", options...)
+	if err != nil {
+		return nil, err
+	}
+
 	cdt = quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("replay_id", "j"))
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.Coalesce(quel.NewIdent("text", "j"), quel.NewLiteral(""))),
 	}
-	q, err = q.LeftInnerJoin(quel.Alias("j", quel.NewIdent("replay_job")), cdt, options...)
+	q, err = q.LeftInnerJoin(quel.Alias("j", jobs), cdt, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -228,12 +241,17 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 		return nil, err
 	}
 
+	gaps, err := quel.NewDistinct("gap_replay_list", quel.SelectColumns("replay_id"))
+	if err != nil {
+		return nil, err
+	}
+
 	cdt = quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("replay_id", "g"))
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.IsNull(quel.NewIdent("replay_id", "g"))),
 		quel.SelectWhere(where),
 	}
-	return q.LeftOuterJoin(quel.Alias("g", quel.NewIdent("gap_replay_list")), cdt, options...)
+	return q.LeftOuterJoin(quel.Alias("g", gaps), cdt, options...)
 }
 
 func (s DBStore) FetchReplayDetail(id int) (Replay, error) {
