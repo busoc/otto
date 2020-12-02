@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -74,14 +75,14 @@ type GapStore interface {
 }
 
 type Replay struct {
-	Id        int       `json:"id"`
-	Status    string    `json:"status"`
-	Priority  int       `json:"priority"`
-	When      time.Time `json:"time"`
-	Comment   string    `json:"comment"`
-	Pass      int       `json:"pass"`
-	Automatic bool      `json:"automatic"`
-	Cancellable bool    `json:"cancellable"`
+	Id          int       `json:"id"`
+	Status      string    `json:"status"`
+	Priority    int       `json:"priority"`
+	When        time.Time `json:"time"`
+	Comment     string    `json:"comment"`
+	Pass        int       `json:"pass"`
+	Automatic   bool      `json:"automatic"`
+	Cancellable bool      `json:"cancellable"`
 	Period
 }
 
@@ -139,10 +140,7 @@ func main() {
 	conf := struct {
 		Addr  string
 		Quiet bool
-		Mon   struct {
-			Pid  string `toml:"pidfile"`
-			Proc string `toml:"proc"`
-		} `toml:"autobrm"`
+		Mon   Monitor `toml:"autobrm"`
 		DB struct {
 			Name   string `toml:"database"`
 			Addr   string
@@ -159,7 +157,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := setupStore(conf.DB.Addr, conf.DB.User, conf.DB.Passwd, conf.DB.Name)
+	db, err := setupStore(conf.DB.Addr, conf.DB.User, conf.DB.Passwd, conf.DB.Name, conf.Mon)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(3)
@@ -282,11 +280,16 @@ func setupRoutes(db Store, origins []string) http.Handler {
 	return handlers.CORS(handlers.AllowedOrigins(origins), handlers.AllowedMethods(methods))(r)
 }
 
-func setupStore(addr, user, passwd, name string) (Store, error) {
+func setupStore(addr, user, passwd, name string, mon Monitor) (Store, error) {
 	if addr == "file" || addr == "dir" {
 		return NewFileStore(name)
 	}
-	return NewDBStore(addr, name, user, passwd)
+	if mon.Proc == "" {
+		mon.Proc = "/proc"
+	} else {
+		mon.Proc = filepath.Clean(mon.Proc)
+	}
+	return NewDBStore(addr, name, user, passwd, mon)
 }
 
 func wrapHandler(do Handler) http.Handler {
@@ -385,7 +388,7 @@ func cancelRequest(db ReplayStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		c := struct{
+		c := struct {
 			Comment string `json:"comment"`
 		}{}
 		if err := parseBody(r, &c); err != nil {

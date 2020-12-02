@@ -11,10 +11,11 @@ import (
 )
 
 type DBStore struct {
-	db *sql.DB
+	db  *sql.DB
+	mon Monitor
 }
 
-func NewDBStore(addr, name, user, passwd string) (Store, error) {
+func NewDBStore(addr, name, user, passwd string, mon Monitor) (Store, error) {
 	addr = fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true", user, passwd, addr, name)
 	db, err := sql.Open("mysql", addr)
 	if err != nil {
@@ -24,12 +25,16 @@ func NewDBStore(addr, name, user, passwd string) (Store, error) {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(10)
 
-	return DBStore{db: db}, nil
+	s := DBStore{
+		db:  db,
+		mon: mon,
+	}
+	return s, nil
 }
 
 func (s DBStore) Status() (interface{}, error) {
 	status := map[string]interface{}{
-		"autobrm": "unknown",
+		"autobrm": s.mon.readProcess(),
 		"requests": map[string]interface{}{
 			"count": s.countRequests(),
 		},
@@ -43,10 +48,6 @@ func (s DBStore) Status() (interface{}, error) {
 	return status, nil
 }
 
-func (s DBStore) readStatus() (map[string]interface{}, error) {
-	return nil, nil
-}
-
 func (s DBStore) countRequests() int {
 	return s.countItems("replay")
 }
@@ -57,6 +58,23 @@ func (s DBStore) countGapsHRD() int {
 
 func (s DBStore) countGapsVMU() int {
 	return s.countItems("vmu_packet_gap")
+}
+
+func (s DBStore) countItems(table string) int {
+	cid := quel.Count(quel.NewIdent("id"))
+	q, err := quel.NewSelect(table, quel.SelectColumn(cid))
+	if err != nil {
+		return 0
+	}
+	query, _, err := q.SQL()
+	if err != nil {
+		return 0
+	}
+	var count int
+	if err := s.db.QueryRow(query).Scan(&count); err != nil {
+		return count
+	}
+	return count
 }
 
 func (s DBStore) normalizeInterval(start, end time.Time, table, column string) (time.Time, time.Time, error) {
@@ -92,23 +110,6 @@ func (s DBStore) retrInterval(table, column string) (time.Time, time.Time, error
 	return dtstart, dtend, s.db.QueryRow(query, args...).Scan(&dtstart, &dtend)
 }
 
-func (s DBStore) countItems(table string) int {
-	cid := quel.Count(quel.NewIdent("id"))
-	q, err := quel.NewSelect(table, quel.SelectColumn(cid))
-	if err != nil {
-		return 0
-	}
-	query, _, err := q.SQL()
-	if err != nil {
-		return 0
-	}
-	var count int
-	if err := s.db.QueryRow(query).Scan(&count); err != nil {
-		return count
-	}
-	return count
-}
-
 func (s DBStore) FetchStatus() ([]StatusInfo, error) {
 	q, err := prepareStatusInfoQuery()
 	if err != nil {
@@ -138,7 +139,7 @@ func prepareStatusInfoQuery() (quel.SQLer, error) {
 		return nil, err
 	}
 	var (
-		cdt = quel.Equal(quel.NewIdent("id", "s"), quel.NewIdent("replay_status_id", "c"))
+		cdt   = quel.Equal(quel.NewIdent("id", "s"), quel.NewIdent("replay_status_id", "c"))
 		count = quel.Coalesce(quel.NewIdent("count", "c"), quel.Arg("count", 0))
 	)
 	return qs.LeftOuterJoin(quel.Alias("c", qc), cdt, quel.SelectColumn(count))
@@ -316,9 +317,9 @@ func (s DBStore) shouldCancelReplay(id int) error {
 		return err
 	}
 	var (
-		ideq = quel.Equal(quel.NewIdent("replay_id"), quel.Arg("id", id))
+		ideq  = quel.Equal(quel.NewIdent("replay_id"), quel.Arg("id", id))
 		jobeq = quel.Equal(quel.NewIdent("replay_status_id"), sub)
-		and = quel.And(ideq, jobeq)
+		and   = quel.And(ideq, jobeq)
 	)
 	options := []quel.SelectOption{
 		quel.SelectColumn(quel.NewIdent("replay_id")),
