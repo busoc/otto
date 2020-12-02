@@ -270,9 +270,9 @@ func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 		if url == "" {
 			url = "/"
 		}
-		r.Handle(url, http.FileServer(http.Dir(site)))
-		r.Handle("/css/", http.FileServer(http.Dir(filepath.Join(site, "css"))))
-		r.Handle("/js/", http.FileServer(http.Dir(filepath.Join(site, "js"))))
+		r.Handle(url, http.FileServer(http.Dir(site))).Methods(http.MethodGet)
+		r.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir(filepath.Join(site, "css")))))
+		r.PathPrefix("/js/").Handler(http.StripPrefix("/js/", http.FileServer(http.Dir(filepath.Join(site, "js")))))
 	}
 	for _, route := range routes {
 		next := wrapHandler(route.Do)
