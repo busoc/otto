@@ -163,7 +163,7 @@ func main() {
 		os.Exit(3)
 	}
 
-	handler := setupRoutes(db, []string{"*"})
+	handler := setupRoutes(db, conf.Site.Base, conf.Site.URL, []string{"*"})
 	if !conf.Quiet {
 		handler = handlers.LoggingHandler(os.Stdout, handler)
 	}
@@ -173,7 +173,7 @@ func main() {
 	}
 }
 
-func setupRoutes(db Store, origins []string) http.Handler {
+func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 	routes := []struct {
 		Do      Handler
 		URL     string
@@ -266,6 +266,12 @@ func setupRoutes(db Store, origins []string) http.Handler {
 		},
 	}
 	r := mux.NewRouter()
+	if site != "" {
+		if url == "" {
+			url = "/"
+		}
+		r.Handle(url, http.FileServer(http.Dir(site)))
+	}
 	for _, route := range routes {
 		next := wrapHandler(route.Do)
 		r.Handle(route.URL, next).Methods(route.Methods...).Headers("Accept", "application/json")
