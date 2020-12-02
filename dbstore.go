@@ -178,7 +178,7 @@ func (s DBStore) FetchReplays(start time.Time, end time.Time, status string) ([]
 			r   Replay
 			err error
 		)
-		if err = rows.Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic); err == nil {
+		if err = rows.Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic, &r.Cancellable); err == nil {
 			vs = append(vs, r)
 		}
 		return err
@@ -254,10 +254,26 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 		return nil, err
 	}
 
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("id")),
+		quel.SelectOrderBy(quel.Desc("workflow")),
+		quel.SelectLimit(4),
+	}
+	cancellable, err := quel.NewSelect("replay_status", options...)
+	if err != nil {
+		return nil, err
+	}
+
+	sub, err := quel.NewSelect("cancellable")
+	if err != nil {
+		return nil, err
+	}
 	cdt = quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("replay_id", "g"))
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.IsNull(quel.NewIdent("replay_id", "g"))),
+		quel.SelectColumn(quel.NotIn(quel.NewIdent("replay_status_id"), sub)),
 		quel.SelectWhere(where),
+		quel.SelectWith("cancellable", cancellable, quel.NewIdent("id")),
 	}
 	return q.LeftOuterJoin(quel.Alias("g", gaps), cdt, options...)
 }
@@ -361,7 +377,7 @@ func (s DBStore) retrReplay(id int, r *Replay) error {
 	if err != nil {
 		return err
 	}
-	return s.db.QueryRow(query, args...).Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic)
+	return s.db.QueryRow(query, args...).Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic, &r.Cancellable)
 }
 
 func (s DBStore) RegisterReplay(r Replay) (Replay, error) {
