@@ -97,8 +97,9 @@ func (s FileStore) FetchReplayDetail(id int) (Replay, error) {
 	})
 }
 
-func (s FileStore) CancelReplay(id int) error {
-	return ErrImpl
+func (s FileStore) CancelReplay(id int, comment string) (Replay, error) {
+	var r Replay
+	return r, ErrImpl
 }
 
 func (s FileStore) UpdateReplay(id int, priority int) (Replay, error) {

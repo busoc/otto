@@ -59,7 +59,7 @@ type SourceInfo struct {
 }
 
 type ChannelInfo struct {
-	Channel string `json:"source"`
+	Channel string `json:"channel"`
 	Count   int    `json:"count"`
 }
 
@@ -81,6 +81,7 @@ type Replay struct {
 	Comment   string    `json:"comment"`
 	Pass      int       `json:"pass"`
 	Automatic bool      `json:"automatic"`
+	Cancellable bool    `json:"cancellable"`
 	Period
 }
 
@@ -95,7 +96,7 @@ type ReplayStore interface {
 	FetchStatus() ([]StatusInfo, error)
 	FetchReplays(time.Time, time.Time, string) ([]Replay, error)
 	FetchReplayDetail(int) (Replay, error)
-	CancelReplay(int) error
+	CancelReplay(int, string) (Replay, error)
 	UpdateReplay(int, int) (Replay, error)
 	RegisterReplay(Replay) (Replay, error)
 }
@@ -203,7 +204,7 @@ func setupRoutes(db Store, origins []string) http.Handler {
 		{
 			URL:     "/requests/{id}",
 			Do:      cancelRequest(db),
-			Methods: []string{http.MethodDelete},
+			Methods: []string{http.MethodPost},
 		},
 		{
 			URL:     "/requests/{id}",
@@ -384,7 +385,13 @@ func cancelRequest(db ReplayStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		return nil, db.CancelReplay(id)
+		c := struct{
+			Comment string `json:"comment"`
+		}{}
+		if err := parseBody(r, &c); err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		return db.CancelReplay(id, c.Comment)
 	}
 }
 

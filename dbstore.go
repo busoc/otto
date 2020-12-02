@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,6 +41,10 @@ func (s DBStore) Status() (interface{}, error) {
 		},
 	}
 	return status, nil
+}
+
+func (s DBStore) readStatus() (map[string]interface{}, error) {
+	return nil, nil
 }
 
 func (s DBStore) countRequests() int {
@@ -132,8 +137,11 @@ func prepareStatusInfoQuery() (quel.SQLer, error) {
 	if err != nil {
 		return nil, err
 	}
-	cdt := quel.Equal(quel.NewIdent("id", "s"), quel.NewIdent("replay_status_id", "c"))
-	return qs.LeftOuterJoin(quel.Alias("c", qc), cdt, quel.SelectColumn(quel.NewIdent("count", "c")))
+	var (
+		cdt = quel.Equal(quel.NewIdent("id", "s"), quel.NewIdent("replay_status_id", "c"))
+		count = quel.Coalesce(quel.NewIdent("count", "c"), quel.Arg("count", 0))
+	)
+	return qs.LeftOuterJoin(quel.Alias("c", qc), cdt, quel.SelectColumn(count))
 }
 
 func prepareStatusQuery() (quel.Select, error) {
@@ -259,8 +267,62 @@ func (s DBStore) FetchReplayDetail(id int) (Replay, error) {
 	return r, ErrImpl
 }
 
-func (s DBStore) CancelReplay(id int) error {
-	return ErrImpl
+func (s DBStore) CancelReplay(id int, comment string) (Replay, error) {
+	var r Replay
+	if err := s.shouldCancelReplay(id); err != nil {
+		return r, err
+	}
+	get, err := prepareRetrCancelStatus("id")
+	if err != nil {
+		return r, err
+	}
+	tx, err := s.db.Begin()
+	options := []quel.InsertOption{
+		quel.InsertColumns("timestamp", "replay_id", "replay_status_id", "text"),
+		quel.InsertValues(quel.Now(), quel.Arg("id", id), get, quel.Arg("comment", comment)),
+	}
+	i, err := quel.NewInsert("replay_job", options...)
+	if err == nil {
+		err = s.exec(tx, i, []string{"id", "comment"})
+	}
+	if err != nil {
+		tx.Rollback()
+		return r, err
+	} else {
+		tx.Commit()
+	}
+	return r, s.retrReplay(id, &r)
+}
+
+func (s DBStore) shouldCancelReplay(id int) error {
+	sub, err := prepareRetrCancelStatus("id")
+	if err != nil {
+		return err
+	}
+	var (
+		ideq = quel.Equal(quel.NewIdent("replay_id"), quel.Arg("id", id))
+		jobeq = quel.Equal(quel.NewIdent("replay_status_id"), sub)
+		and = quel.And(ideq, jobeq)
+	)
+	options := []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("replay_id")),
+		quel.SelectWhere(and),
+	}
+	q, err := quel.NewSelect("replay_job", options...)
+	if err != nil {
+		return err
+	}
+	query, args, err := q.SQL()
+	if err != nil {
+		return err
+	}
+	err = s.db.QueryRow(query, args...).Scan(&id)
+	if err == nil {
+		err = fmt.Errorf("%w: replay job already cancelled", ErrQuery)
+	} else if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return err
 }
 
 func (s DBStore) UpdateReplay(id int, priority int) (Replay, error) {
@@ -362,6 +424,19 @@ func (s DBStore) registerReplayJob(tx *sql.Tx, r *Replay) error {
 		err = s.exec(tx, i, []string{"comment", "replay"})
 	}
 	return err
+}
+
+func prepareRetrCancelStatus(field string) (quel.Select, error) {
+	var (
+		max      = quel.Max(quel.NewIdent("workflow"))
+		where, _ = quel.NewSelect("replay_status", quel.SelectColumn(max))
+		options  = []quel.SelectOption{
+			quel.SelectColumn(quel.NewIdent(field)),
+			quel.SelectWhere(quel.Equal(quel.NewIdent("workflow"), where)),
+			quel.SelectLimit(1),
+		}
+	)
+	return quel.NewSelect("replay_status", options...)
 }
 
 func prepareRetrInitialStatus(field string) (quel.Select, error) {
@@ -695,7 +770,6 @@ func (s DBStore) query(q quel.SQLer, scan func(rows *sql.Rows) error) error {
 	defer rows.Close()
 	for rows.Next() {
 		if err := scan(rows); err != nil {
-			fmt.Println(err)
 			return err
 		}
 	}
