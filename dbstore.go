@@ -232,7 +232,6 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.NewIdent("replay_id", "j")),
-		quel.SelectColumn(quel.NewIdent("replay_status_id", "m")),
 		quel.SelectColumn(quel.NewIdent("text", "j")),
 		quel.SelectAlias("j"),
 	}
@@ -241,7 +240,7 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 		return nil, err
 	}
 	cdt = quel.NewList(quel.NewIdent("replay_id"), quel.NewIdent("replay_status_id"))
-	latest, err = latest.LeftInnerJoin(quel.Alias("m", jobs), cdt)
+	latest, err = latest.LeftInnerJoin(quel.Alias("m", jobs), cdt, quel.SelectColumn(quel.NewIdent("replay_status_id", "m")))
 	if err != nil {
 		return nil, err
 	}
