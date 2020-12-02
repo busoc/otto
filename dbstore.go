@@ -287,6 +287,7 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 		quel.SelectColumn(quel.IsNull(quel.NewIdent("replay_id", "g"))),
 		quel.SelectColumn(quel.NotIn(quel.NewIdent("replay_status_id"), sub)),
 		quel.SelectWith("cancellable", cancellable, quel.NewIdent("id")),
+		quel.SelectWhere(where),
 	}
 	return q.LeftOuterJoin(quel.Alias("g", gaps), cdt, options...)
 }
