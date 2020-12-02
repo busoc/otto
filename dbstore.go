@@ -221,13 +221,27 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 	}
 
 	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("id")),
 		quel.SelectColumn(quel.NewIdent("replay_id")),
 		quel.SelectColumn(quel.Alias("replay_status_id", quel.Max(quel.NewIdent("replay_status_id")))),
-		quel.SelectColumn(quel.NewIdent("text")),
 		quel.SelectGroupBy(quel.NewIdent("replay_id")),
 	}
 	jobs, err := quel.NewSelect("replay_job", options...)
+	if err != nil {
+		return nil, err
+	}
+
+	options = []quel.SelectOption{
+		quel.SelectColumn(quel.NewIdent("replay_id", "j")),
+		quel.SelectColumn(quel.NewIdent("replay_status_id", "m")),
+		quel.SelectColumn(quel.NewIdent("text", "j")),
+		quel.SelectAlias("j"),
+	}
+	latest, err := quel.NewSelect("replay_job", options...)
+	if err != nil {
+		return nil, err
+	}
+	cdt = quel.NewList(quel.NewIdent("replay_id"), quel.NewIdent("replay_status_id"))
+	latest, err = latest.LeftInnerJoin(quel.Alias("m", jobs), cdt)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +250,7 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.Coalesce(quel.NewIdent("text", "j"), quel.NewLiteral(""))),
 	}
-	q, err = q.LeftInnerJoin(quel.Alias("j", jobs), cdt, options...)
+	q, err = q.LeftInnerJoin(quel.Alias("j", latest), cdt, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +287,6 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 	options = []quel.SelectOption{
 		quel.SelectColumn(quel.IsNull(quel.NewIdent("replay_id", "g"))),
 		quel.SelectColumn(quel.NotIn(quel.NewIdent("replay_status_id"), sub)),
-		quel.SelectWhere(where),
 		quel.SelectWith("cancellable", cancellable, quel.NewIdent("id")),
 	}
 	return q.LeftOuterJoin(quel.Alias("g", gaps), cdt, options...)
