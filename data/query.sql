@@ -49,3 +49,34 @@ FROM replay AS r
   from vmu_record as r
   join (select count(vmu_record_id) as total, vmu_record_id from vmu_packet_gap group by vmu_record_id) as g on r.id=g.vmu_record_id
   group by r.source
+
+with
+  completed(workflow) as (select workflow from replay_status order by workflow DESC LIMIT 3 OFFSET 1),
+  pending(workflow) as (select min(workflow) from replay_status),
+  cancelled(workflow) as (select max(workflow) from replay_status),
+  running(workflow) as (select workflow from replay_status where workflow <> (select workflow from pending) and workflow not in (select workflow from completed))
+select * from (select
+	'PENDING', DATE(timestamp) as TS, count(replay_id) as STAT
+from replay_job
+where replay_status_id=(select id from replay_status where workflow=(select workflow from pending))
+group by TS
+UNION ALL
+select
+	'CANCELLED', DATE(timestamp) as TS, count(replay_id) as STAT
+from replay_job
+where replay_status_id=(select id from replay_status where workflow=(select workflow from cancelled))
+group by TS
+UNION ALL
+select
+	'COMPLETED', DATE(timestamp) as TS, count(replay_id) as STAT
+from replay_job
+where replay_status_id IN (select id from replay_status where workflow in (select workflow from completed))
+group by TS
+UNION ALL
+  select 'RUNNING', TS, count(replay_id) as STAT
+  from (
+    select DATE(timestamp) as TS, replay_id
+    from replay_job j inner join replay_status as s on j.replay_status_id=s.id
+    where replay_status_id IN (select id from replay_status where workflow in (select workflow from running))
+  ) as d group by TS
+) as g where TS >= DATE_SUB(CURRENT_DATE, INTERVAL 15 DAY);

@@ -1,26 +1,26 @@
 package main
 
 import (
-  "bytes"
-  "bufio"
-  "strings"
-  "path/filepath"
-  "io/ioutil"
+	"bufio"
+	"bytes"
+	"io/ioutil"
+	"path/filepath"
+	"strings"
 )
 
 type Monitor struct {
-	Pid string `toml:"pidfile"`
+	Pid  string `toml:"pidfile"`
 	Proc string `toml:"proc"`
 }
 
 func (m Monitor) readProcess() map[string]string {
 	buf, err := ioutil.ReadFile(m.Pid)
-	status := map[string]string {
+	status := map[string]string{
 		"cmdline": "unknown",
 		"name":    "unknown",
 		"state":   "unknown",
 		"pid":     "unknown",
-    "vmsize":  "unknown",
+		"vmsize":  "unknown",
 		"vmrss":   "unknown",
 	}
 	if err != nil {

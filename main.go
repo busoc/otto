@@ -86,6 +86,12 @@ type Replay struct {
 	Period
 }
 
+type JobStatus struct {
+	When   time.Time `json:"time"`
+	Count  int       `json:"count"`
+	Status string    `json:"status"`
+}
+
 type StatusInfo struct {
 	Id    int    `json:"id"`
 	Name  string `json:"name"`
@@ -95,6 +101,7 @@ type StatusInfo struct {
 
 type ReplayStore interface {
 	FetchStatus() ([]StatusInfo, error)
+	FetchReplayStats(int) ([]JobStatus, error)
 	FetchReplays(time.Time, time.Time, string) ([]Replay, error)
 	FetchReplayDetail(int) (Replay, error)
 	CancelReplay(int, string) (Replay, error)
@@ -141,7 +148,7 @@ func main() {
 		Addr  string
 		Quiet bool
 		Mon   Monitor `toml:"autobrm"`
-		DB struct {
+		DB    struct {
 			Name   string `toml:"database"`
 			Addr   string
 			User   string
@@ -182,6 +189,11 @@ func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 		{
 			URL:     "/status/",
 			Do:      listStatus(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
+			URL:     "/stats/requests/",
+			Do:      listRequestsStats(db),
 			Methods: []string{http.MethodGet},
 		},
 		{
@@ -289,9 +301,6 @@ func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 }
 
 func setupStore(addr, user, passwd, name string, mon Monitor) (Store, error) {
-	if addr == "file" || addr == "dir" {
-		return NewFileStore(name)
-	}
 	if mon.Proc == "" {
 		mon.Proc = "/proc"
 	} else {
@@ -355,6 +364,12 @@ func listRequests(db ReplayStore) Handler {
 			return nil, fmt.Errorf("%w: err", ErrQuery, err)
 		}
 		return db.FetchReplays(start, end, r.URL.Query().Get(fieldStatus))
+	}
+}
+
+func listRequestsStats(db ReplayStore) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		return db.FetchReplayStats(0)
 	}
 }
 

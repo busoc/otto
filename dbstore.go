@@ -164,6 +164,34 @@ func prepareCountStatusQuery() (quel.Select, error) {
 	return quel.NewSelect("replay_job", options...)
 }
 
+func (s DBStore) FetchReplayStats(days int) ([]JobStatus, error) {
+	if days <= 0 {
+		days = 30
+	}
+	var (
+		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.Days(days))
+		options = []quel.SelectOption{
+			quel.SelectColumns("label", "timestamp", "count"),
+			quel.SelectWhere(quel.GreaterOrEqual(quel.NewIdent("timestamp"), expr)),
+		}
+	)
+	q, err := quel.NewSelect("jobs_status", options...)
+	if err != nil {
+		return nil, err
+	}
+	var vs []JobStatus
+	return vs, s.query(q, func(rows *sql.Rows) error {
+		var (
+			j JobStatus
+			err error
+		)
+		if err = rows.Scan(&j.Status, &j.When, &j.Count); err == nil {
+			vs = append(vs, j)
+		}
+		return err
+	})
+}
+
 func (s DBStore) FetchReplays(start time.Time, end time.Time, status string) ([]Replay, error) {
 	start, end, err := s.normalizeInterval(start, end, "replay", "startdate")
 	if err != nil {
