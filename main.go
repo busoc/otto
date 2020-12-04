@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -123,8 +124,15 @@ type ConfigStore interface {
 	RegisterVariable(v Variable) (Variable, error)
 }
 
+type ItemInfo struct {
+	Label string    `json:"label"`
+	When  time.Time `json:"time"`
+	Count int       `json:"count"`
+}
+
 type Store interface {
 	Status() (interface{}, error)
+	FetchCounts(int) ([]ItemInfo, error)
 
 	GapStore
 	ReplayStore
@@ -189,6 +197,11 @@ func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 		{
 			URL:     "/status/",
 			Do:      listStatus(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
+			URL:     "/stats/items/",
+			Do:      listItemsStats(db),
 			Methods: []string{http.MethodGet},
 		},
 		{
@@ -357,6 +370,16 @@ func listStatus(db Store) Handler {
 	}
 }
 
+func listItemsStats(db Store) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		days, err := parseIntQuery(r.URL.Query(), "days")
+		if err != nil {
+			return nil, err
+		}
+		return db.FetchCounts(days)
+	}
+}
+
 func listRequests(db ReplayStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
 		start, end, err := parsePeriod(r)
@@ -369,7 +392,11 @@ func listRequests(db ReplayStore) Handler {
 
 func listRequestsStats(db ReplayStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
-		return db.FetchReplayStats(0)
+		days, err := parseIntQuery(r.URL.Query(), "days")
+		if err != nil {
+			return nil, err
+		}
+		return db.FetchReplayStats(days)
 	}
 }
 
@@ -530,6 +557,14 @@ func parseBody(r *http.Request, body interface{}) error {
 		N: MaxBodySize,
 	}
 	return json.NewDecoder(&rs).Decode(body)
+}
+
+func parseIntQuery(q url.Values, field string) (int, error) {
+	field = q.Get(field)
+	if field == "" {
+		return 0, nil
+	}
+	return strconv.Atoi(field)
 }
 
 func parseInt(r *http.Request, field string) (int, error) {

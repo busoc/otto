@@ -77,6 +77,36 @@ func (s DBStore) countItems(table string) int {
 	return count
 }
 
+func (s DBStore) FetchCounts(days int) ([]ItemInfo, error) {
+	if days <= 0 {
+		days = 30
+	}
+	var (
+		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.Days(days))
+		options = []quel.SelectOption{
+			quel.SelectColumn(quel.NewIdent("label")),
+			quel.SelectColumn(quel.NewIdent("date")),
+			quel.SelectColumn(quel.NewIdent("count")),
+			quel.SelectWhere(quel.GreaterOrEqual(quel.NewIdent("date"), expr)),
+		}
+	)
+	q, err := quel.NewSelect("items_count", options...)
+	if err != nil {
+		return nil, err
+	}
+	var vs []ItemInfo
+	return vs, s.query(q, func(rows *sql.Rows) error {
+		var (
+			i   ItemInfo
+			err error
+		)
+		if err = rows.Scan(&i.Label, &i.When, &i.Count); err == nil {
+			vs = append(vs, i)
+		}
+		return err
+	})
+}
+
 func (s DBStore) normalizeInterval(start, end time.Time, table, column string) (time.Time, time.Time, error) {
 	if !start.IsZero() && !end.IsZero() && start.After(end) {
 		return start, end, ErrQuery
@@ -182,7 +212,7 @@ func (s DBStore) FetchReplayStats(days int) ([]JobStatus, error) {
 	var vs []JobStatus
 	return vs, s.query(q, func(rows *sql.Rows) error {
 		var (
-			j JobStatus
+			j   JobStatus
 			err error
 		)
 		if err = rows.Scan(&j.Status, &j.When, &j.Count); err == nil {
