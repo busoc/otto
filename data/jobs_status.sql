@@ -14,5 +14,7 @@ union all
 select 'COMPLETED' as label, date(timestamp) as time, count(replay_id) as total
 from replay_job where replay_status_id in (select id from replay_status where workflow in (select workflow from completed)) group by time
 union all
-select 'RUNNING' as label, date(timestamp) as time, count(replay_id) as total
-from replay_job where replay_status_id in (select id from replay_status where workflow in (select workflow from running)) group by time
+select 'RUNNING', date as time, count(replay_status_id) as total from (
+	select date(timestamp) as date, replay_id, max(replay_status_id) as replay_status_id
+	from replay_job where replay_status_id in (select workflow from running) group by replay_id, date) as g
+group by date

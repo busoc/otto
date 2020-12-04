@@ -226,98 +226,26 @@ func prepareSelectListReplay(start, end time.Time, status string) (quel.SQLer, e
 		where = quel.And(fst, lst)
 	}
 	if status != "" {
-		where = quel.And(where, quel.Equal(quel.NewIdent("name", "s"), quel.Arg("status", status)))
+		where = quel.And(where, quel.Equal(quel.NewIdent("status", "r"), quel.Arg("status", status)))
 	}
 	return prepareSelectReplay(where)
 }
 
 func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
-	var (
-		cdt     quel.SQLer
-		options = []quel.SelectOption{
-			quel.SelectAlias("r"),
-			quel.SelectColumn(quel.NewIdent("id", "r")),
-			quel.SelectColumn(quel.NewIdent("timestamp", "r")),
-			quel.SelectColumn(quel.NewIdent("startdate", "r")),
-			quel.SelectColumn(quel.NewIdent("enddate", "r")),
-			quel.SelectColumn(quel.Coalesce(quel.NewIdent("priority", "r"), quel.NewLiteral(-1))),
-		}
-	)
-	q, err := quel.NewSelect("replay", options...)
-	if err != nil {
-		return nil, err
-	}
-
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("replay_id")),
-		quel.SelectColumn(quel.Alias("replay_status_id", quel.Max(quel.NewIdent("replay_status_id")))),
-		quel.SelectGroupBy(quel.NewIdent("replay_id")),
-	}
-	jobs, err := quel.NewSelect("replay_job", options...)
-	if err != nil {
-		return nil, err
-	}
-
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("replay_id", "j")),
-		quel.SelectColumn(quel.NewIdent("text", "j")),
-		quel.SelectAlias("j"),
-	}
-	latest, err := quel.NewSelect("replay_job", options...)
-	if err != nil {
-		return nil, err
-	}
-	cdt = quel.NewList(quel.NewIdent("replay_id"), quel.NewIdent("replay_status_id"))
-	latest, err = latest.LeftInnerJoin(quel.Alias("m", jobs), cdt, quel.SelectColumn(quel.NewIdent("replay_status_id", "m")))
-	if err != nil {
-		return nil, err
-	}
-
-	cdt = quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("replay_id", "j"))
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.Coalesce(quel.NewIdent("text", "j"), quel.NewLiteral(""))),
-	}
-	q, err = q.LeftInnerJoin(quel.Alias("j", latest), cdt, options...)
-	if err != nil {
-		return nil, err
-	}
-
-	cdt = quel.Equal(quel.NewIdent("id", "s"), quel.NewIdent("replay_status_id", "j"))
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("name", "s")),
-	}
-	q, err = q.LeftInnerJoin(quel.Alias("s", quel.NewIdent("replay_status")), cdt, options...)
-	if err != nil {
-		return nil, err
-	}
-
-	gaps, err := quel.NewDistinct("gap_replay_list", quel.SelectColumns("replay_id"))
-	if err != nil {
-		return nil, err
-	}
-
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("id")),
-		quel.SelectOrderBy(quel.Desc("workflow")),
-		quel.SelectLimit(4),
-	}
-	cancellable, err := quel.NewSelect("replay_status", options...)
-	if err != nil {
-		return nil, err
-	}
-
-	sub, err := quel.NewSelect("cancellable")
-	if err != nil {
-		return nil, err
-	}
-	cdt = quel.Equal(quel.NewIdent("id", "r"), quel.NewIdent("replay_id", "g"))
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.IsNull(quel.NewIdent("replay_id", "g"))),
-		quel.SelectColumn(quel.NotIn(quel.NewIdent("replay_status_id"), sub)),
-		quel.SelectWith("cancellable", cancellable, quel.NewIdent("id")),
+	options := []quel.SelectOption{
+		quel.SelectAlias("r"),
+		quel.SelectColumn(quel.NewIdent("id", "r")),
+		quel.SelectColumn(quel.NewIdent("timestamp", "r")),
+		quel.SelectColumn(quel.NewIdent("startdate", "r")),
+		quel.SelectColumn(quel.NewIdent("enddate", "r")),
+		quel.SelectColumn(quel.NewIdent("priority", "r")),
+		quel.SelectColumn(quel.NewIdent("comment", "r")),
+		quel.SelectColumn(quel.NewIdent("status", "r")),
+		quel.SelectColumn(quel.NewIdent("automatic", "r")),
+		quel.SelectColumn(quel.NewIdent("cancellable", "r")),
 		quel.SelectWhere(where),
 	}
-	return q.LeftOuterJoin(quel.Alias("g", gaps), cdt, options...)
+	return quel.NewSelect("replay_list", options...)
 }
 
 func (s DBStore) FetchReplayDetail(id int) (Replay, error) {
@@ -805,9 +733,9 @@ func (s DBStore) exec(tx *sql.Tx, q quel.SQLer, names []string) error {
 	if err != nil {
 		return err
 	}
-	if len(args) != len(names) {
-		return fmt.Errorf("number of arguments mismatched!")
-	}
+	// if len(args) != len(names) {
+	// 	return fmt.Errorf("number of arguments mismatched!")
+	// }
 	_, err = tx.Exec(query, args...)
 	return err
 }
@@ -821,7 +749,7 @@ func (s DBStore) query(q quel.SQLer, scan func(rows *sql.Rows) error) error {
 	switch err {
 	case nil:
 	case sql.ErrNoRows:
-		return nil
+		return ErrEmpty
 	default:
 		return err
 	}
