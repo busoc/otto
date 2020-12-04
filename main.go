@@ -126,8 +126,10 @@ type ConfigStore interface {
 
 type ItemInfo struct {
 	Label string    `json:"label"`
+	Origin string    `json:"origin"`
 	When  time.Time `json:"time"`
 	Count int       `json:"count"`
+	Duration int       `json:"duration"`
 }
 
 type Store interface {

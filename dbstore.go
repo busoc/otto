@@ -85,8 +85,10 @@ func (s DBStore) FetchCounts(days int) ([]ItemInfo, error) {
 		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.Days(days))
 		options = []quel.SelectOption{
 			quel.SelectColumn(quel.NewIdent("label")),
+			quel.SelectColumn(quel.NewIdent("origin")),
 			quel.SelectColumn(quel.NewIdent("date")),
 			quel.SelectColumn(quel.NewIdent("count")),
+			quel.SelectColumn(quel.NewIdent("duration")),
 			quel.SelectWhere(quel.GreaterOrEqual(quel.NewIdent("date"), expr)),
 		}
 	)
@@ -100,7 +102,7 @@ func (s DBStore) FetchCounts(days int) ([]ItemInfo, error) {
 			i   ItemInfo
 			err error
 		)
-		if err = rows.Scan(&i.Label, &i.When, &i.Count); err == nil {
+		if err = rows.Scan(&i.Label, &i.Origin, &i.When, &i.Count, &i.Duration); err == nil {
 			vs = append(vs, i)
 		}
 		return err
