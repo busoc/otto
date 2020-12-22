@@ -2,8 +2,14 @@ create or replace view replay_list(id, timestamp, startdate, enddate, priority, 
 WITH
 	cancellable(id) AS (SELECT id FROM replay_status ORDER BY workflow DESC LIMIT 4)
 SELECT
-	r.id, r.timestamp, r.startdate, r.enddate,
-	COALESCE(r.priority, -1) as priority, COALESCE(j.text, '') as comment, s.name, g.replay_id IS NOT NULL as automatic,
+	r.id,
+	r.timestamp,
+	r.startdate,
+	r.enddate,
+	COALESCE(r.priority, -1) as priority,
+	COALESCE(j.text, '') as comment,
+	s.name,
+	g.replay_id IS NOT NULL as automatic,
   replay_status_id NOT IN (SELECT * FROM cancellable) as cancellable
 FROM replay AS r
 INNER JOIN (

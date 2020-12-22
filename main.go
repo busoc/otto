@@ -71,7 +71,7 @@ type GapStore interface {
 	FetchChannels() ([]ChannelInfo, error)
 	FetchGapsHRD(time.Time, time.Time, string) ([]HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
-	FetchGapsVMU(time.Time, time.Time, string) ([]VMUGap, error)
+	FetchGapsVMU(time.Time, time.Time, string, string) ([]VMUGap, error)
 	FetchGapDetailVMU(int) (VMUGap, error)
 }
 
@@ -364,6 +364,7 @@ const (
 	fieldId      = "id"
 	fieldStatus  = "status"
 	fieldRecord  = "record"
+	fieldSource  = "source"
 )
 
 func listStatus(db Store) Handler {
@@ -466,7 +467,8 @@ func listGapsVMU(db GapStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: err", ErrQuery, err)
 		}
-		return db.FetchGapsVMU(start, end, r.URL.Query().Get(fieldRecord))
+		query := r.URL.Query()
+		return db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource))
 	}
 }
 

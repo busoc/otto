@@ -549,7 +549,7 @@ func (s DBStore) FetchGapDetailHRD(id int) (HRDGap, error) {
 	return h, ErrImpl
 }
 
-func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record string) ([]VMUGap, error) {
+func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record, source string) ([]VMUGap, error) {
 	start, end, err := s.normalizeInterval(start, end, "vmu_packet_gap", "last_timestamp")
 	if err != nil {
 		return nil, err
@@ -580,6 +580,10 @@ func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record string) ([]
 	}
 	if record != "" {
 		eq := quel.Equal(quel.NewIdent("phase", "r"), quel.Arg("record", record))
+		where = quel.And(where, eq)
+	}
+	if source != "" {
+		eq := quel.Equal(quel.NewIdent("source", "r"), quel.Arg("source", source))
 		where = quel.And(where, eq)
 	}
 
@@ -777,6 +781,7 @@ func (s DBStore) query(q quel.SQLer, scan func(rows *sql.Rows) error) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println(query, args)
 	rows, err := s.db.Query(query, args...)
 	switch err {
 	case nil:
