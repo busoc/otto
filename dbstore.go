@@ -49,29 +49,36 @@ func (s DBStore) Status() (interface{}, error) {
 }
 
 func (s DBStore) countRequests() int {
-	return s.countItems("replay")
+	return s.countItems("replay", "r", nil)
 }
 
 func (s DBStore) countGapsHRD() int {
-	return s.countItems("hrd_packet_gap")
+	return s.countItems("hrd_packet_gap", "r", nil)
 }
 
 func (s DBStore) countGapsVMU() int {
-	return s.countItems("vmu_packet_gap")
+	return s.countItems("vmu_packet_gap", "r", nil)
 }
 
-func (s DBStore) countItems(table string) int {
-	cid := quel.Count(quel.NewIdent("id"))
-	q, err := quel.NewSelect(table, quel.SelectColumn(cid))
+func (s DBStore) countItems(table, alias string, where quel.SQLer) int {
+	options := []quel.SelectOption{
+		quel.SelectColumn(quel.Count(quel.NewIdent("id"))),
+		quel.SelectAlias(alias),
+	}
+	if where != nil {
+		options = append(options, quel.SelectWhere(where))
+	}
+	q, err := quel.NewSelect(table, options...)
 	if err != nil {
 		return 0
 	}
-	query, _, err := q.SQL()
+	query, args, err := q.SQL()
+	fmt.Println(query, args)
 	if err != nil {
 		return 0
 	}
 	var count int
-	if err := s.db.QueryRow(query).Scan(&count); err != nil {
+	if err := s.db.QueryRow(query, args...).Scan(&count); err != nil {
 		return count
 	}
 	return count
@@ -224,29 +231,33 @@ func (s DBStore) FetchReplayStats(days int) ([]JobStatus, error) {
 	})
 }
 
-func (s DBStore) FetchReplays(start time.Time, end time.Time, status string) ([]Replay, error) {
+func (s DBStore) FetchReplays(start time.Time, end time.Time, status string, limit, offset int) (int, []Replay, error) {
 	start, end, err := s.normalizeInterval(start, end, "replay", "startdate")
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
-	q, err := prepareSelectListReplay(start, end, status)
+	var (
+		where = prepareSelectListReplay(start, end, status)
+		count = s.countItems("replay_list", "r", where)
+	)
+	q, err := prepareSelectReplay(where, limit, offset)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	var vs []Replay
-	return vs, s.query(q, func(rows *sql.Rows) error {
+	return count, vs, s.query(q, func(rows *sql.Rows) error {
 		var (
 			r   Replay
 			err error
 		)
-		if err = rows.Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic, &r.Cancellable); err == nil {
+		if err = rows.Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic, &r.Cancellable, &r.Corrupted, &r.Missing); err == nil {
 			vs = append(vs, r)
 		}
 		return err
 	})
 }
 
-func prepareSelectListReplay(start, end time.Time, status string) (quel.SQLer, error) {
+func prepareSelectListReplay(start, end time.Time, status string) quel.SQLer {
 	var where quel.SQLer
 	if start.IsZero() && !end.IsZero() {
 		where = quel.LesserOrEqual(quel.NewIdent("startdate", "r"), quel.Arg("dtend", end))
@@ -260,10 +271,10 @@ func prepareSelectListReplay(start, end time.Time, status string) (quel.SQLer, e
 	if status != "" {
 		where = quel.And(where, quel.Equal(quel.NewIdent("status", "r"), quel.Arg("status", status)))
 	}
-	return prepareSelectReplay(where)
+	return where
 }
 
-func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
+func prepareSelectReplay(where quel.SQLer, limit, offset int) (quel.SQLer, error) {
 	options := []quel.SelectOption{
 		quel.SelectAlias("r"),
 		quel.SelectColumn(quel.NewIdent("id", "r")),
@@ -275,7 +286,13 @@ func prepareSelectReplay(where quel.SQLer) (quel.SQLer, error) {
 		quel.SelectColumn(quel.NewIdent("status", "r")),
 		quel.SelectColumn(quel.NewIdent("automatic", "r")),
 		quel.SelectColumn(quel.NewIdent("cancellable", "r")),
+		quel.SelectColumn(quel.NewIdent("corrupted", "r")),
+		quel.SelectColumn(quel.NewIdent("missing", "r")),
 		quel.SelectWhere(where),
+	}
+	if limit > 0 {
+		options = append(options, quel.SelectLimit(limit))
+		options = append(options, quel.SelectOffset(offset*limit))
 	}
 	return quel.NewSelect("replay_list", options...)
 }
@@ -371,7 +388,7 @@ func (s DBStore) UpdateReplay(id int, priority int) (Replay, error) {
 
 func (s DBStore) retrReplay(id int, r *Replay) error {
 	where := quel.Equal(quel.NewIdent("id", "r"), quel.Arg("id", id))
-	q, err := prepareSelectReplay(where)
+	q, err := prepareSelectReplay(where, 0, 0)
 	if err != nil {
 		return err
 	}
@@ -494,27 +511,16 @@ func (s DBStore) FetchChannels() ([]ChannelInfo, error) {
 	})
 }
 
-func (s DBStore) FetchGapsHRD(start time.Time, end time.Time, channel string) ([]HRDGap, error) {
+func (s DBStore) FetchGapsHRD(start time.Time, end time.Time, channel string, corrupted bool, limit, offset int) (int, []HRDGap, error) {
 	start, end, err := s.normalizeInterval(start, end, "hrd_packet_gap", "last_timestamp")
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
-	var where quel.SQLer
-	if start.IsZero() && !end.IsZero() {
-		where = quel.LesserOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtend", end))
-	} else if !start.IsZero() && end.IsZero() {
-		where = quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtstart", start))
-	} else {
-		fst := quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtstart", start))
-		lst := quel.LesserOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtend", end))
-		where = quel.And(fst, lst)
-	}
-	if channel != "" {
-		eq := quel.Equal(quel.NewIdent("chanel"), quel.Arg("channel", channel))
-		where = quel.And(where, eq)
-	}
-
+	var (
+		where = prepareFilterGapHRD(start, end, channel, corrupted)
+		count = s.countItems("hrd_gap_list", "r", where)
+	)
 	options := []quel.SelectOption{
 		quel.SelectColumn(quel.NewIdent("id", "r")),
 		quel.SelectColumn(quel.NewIdent("timestamp", "r")),
@@ -522,17 +528,20 @@ func (s DBStore) FetchGapsHRD(start time.Time, end time.Time, channel string) ([
 		quel.SelectColumn(quel.NewIdent("last_sequence_count", "r")),
 		quel.SelectColumn(quel.NewIdent("next_timestamp", "r")),
 		quel.SelectColumn(quel.NewIdent("next_sequence_count", "r")),
-		quel.SelectColumn(quel.NewIdent("chanel", "r")),
+		quel.SelectColumn(quel.NewIdent("channel", "r")),
 		quel.SelectWhere(where),
 		quel.SelectAlias("r"),
 	}
-
-	q, err := quel.NewSelect("hrd_packet_gap", options...)
+	if limit > 0 {
+		options = append(options, quel.SelectLimit(limit))
+		options = append(options, quel.SelectOffset(offset*limit))
+	}
+	q, err := quel.NewSelect("hrd_gap_list", options...)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	var vs []HRDGap
-	return vs, s.query(q, func(rows *sql.Rows) error {
+	return count, vs, s.query(q, func(rows *sql.Rows) error {
 		var (
 			g   HRDGap
 			err error
@@ -549,11 +558,17 @@ func (s DBStore) FetchGapDetailHRD(id int) (HRDGap, error) {
 	return h, ErrImpl
 }
 
-func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record, source string) ([]VMUGap, error) {
+func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record, source string, limit, offset int) (int, []VMUGap, error) {
 	start, end, err := s.normalizeInterval(start, end, "vmu_packet_gap", "last_timestamp")
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
+
+	var (
+		where = prepareFilterGapVMU(start, end, record, source)
+		count = s.countItems("vmu_gap_list", "g", where)
+	)
+
 	options := []quel.SelectOption{
 		quel.SelectColumn(quel.NewIdent("id", "g")),
 		quel.SelectColumn(quel.NewIdent("timestamp", "g")),
@@ -561,45 +576,22 @@ func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record, source str
 		quel.SelectColumn(quel.NewIdent("last_sequence_count", "g")),
 		quel.SelectColumn(quel.NewIdent("next_timestamp", "g")),
 		quel.SelectColumn(quel.NewIdent("next_sequence_count", "g")),
+		quel.SelectColumn(quel.NewIdent("source", "g")),
+		quel.SelectColumn(quel.NewIdent("phase", "g")),
 		quel.SelectAlias("g"),
-	}
-	q, err := quel.NewSelect("vmu_packet_gap", options...)
-	if err != nil {
-		return nil, err
-	}
-
-	var where quel.SQLer
-	if start.IsZero() && !end.IsZero() {
-		where = quel.LesserOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtend", end))
-	} else if !start.IsZero() && end.IsZero() {
-		where = quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtstart", start))
-	} else {
-		fst := quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtstart", start))
-		lst := quel.LesserOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtend", end))
-		where = quel.And(fst, lst)
-	}
-	if record != "" {
-		eq := quel.Equal(quel.NewIdent("phase", "r"), quel.Arg("record", record))
-		where = quel.And(where, eq)
-	}
-	if source != "" {
-		eq := quel.Equal(quel.NewIdent("source", "r"), quel.Arg("source", source))
-		where = quel.And(where, eq)
-	}
-
-	options = []quel.SelectOption{
-		quel.SelectColumn(quel.NewIdent("source", "r")),
-		quel.SelectColumn(quel.Coalesce(quel.NewIdent("phase", "r"), quel.NewLiteral(""))),
 		quel.SelectWhere(where),
 	}
-	cdt := quel.Equal(quel.NewIdent("vmu_record_id", "g"), quel.NewIdent("id", "r"))
-	q, err = q.LeftInnerJoin(quel.Alias("r", quel.NewIdent("vmu_record")), cdt, options...)
+	if limit > 0 {
+		options = append(options, quel.SelectLimit(limit))
+		options = append(options, quel.SelectOffset(offset*limit))
+	}
+	q, err := quel.NewSelect("vmu_gap_list", options...)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	var vs []VMUGap
-	return vs, s.query(q, func(rows *sql.Rows) error {
+	return count, vs, s.query(q, func(rows *sql.Rows) error {
 		var (
 			g   VMUGap
 			err error
@@ -769,9 +761,6 @@ func (s DBStore) exec(tx *sql.Tx, q quel.SQLer, names []string) error {
 	if err != nil {
 		return err
 	}
-	// if len(args) != len(names) {
-	// 	return fmt.Errorf("number of arguments mismatched!")
-	// }
 	_, err = tx.Exec(query, args...)
 	return err
 }
@@ -797,4 +786,48 @@ func (s DBStore) query(q quel.SQLer, scan func(rows *sql.Rows) error) error {
 		}
 	}
 	return nil
+}
+
+func prepareFilterGapHRD(start, end time.Time, channel string, corrupted bool) quel.SQLer {
+	var where quel.SQLer
+	if start.IsZero() && !end.IsZero() {
+		where = quel.LesserOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtend", end))
+	} else if !start.IsZero() && end.IsZero() {
+		where = quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtstart", start))
+	} else {
+		fst := quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtstart", start))
+		lst := quel.LesserOrEqual(quel.NewIdent("last_timestamp", "r"), quel.Arg("dtend", end))
+		where = quel.And(fst, lst)
+	}
+	if channel != "" {
+		eq := quel.Equal(quel.NewIdent("channel"), quel.Arg("channel", channel))
+		where = quel.And(where, eq)
+	}
+	if !corrupted {
+		eq := quel.Equal(quel.NewIdent("corrupted", "r"), quel.NewLiteral(corrupted))
+		where = quel.And(where, eq)
+	}
+	return where
+}
+
+func prepareFilterGapVMU(start, end time.Time, record, source string) quel.SQLer {
+	var where quel.SQLer
+	if start.IsZero() && !end.IsZero() {
+		where = quel.LesserOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtend", end))
+	} else if !start.IsZero() && end.IsZero() {
+		where = quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtstart", start))
+	} else {
+		fst := quel.GreaterOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtstart", start))
+		lst := quel.LesserOrEqual(quel.NewIdent("last_timestamp", "g"), quel.Arg("dtend", end))
+		where = quel.And(fst, lst)
+	}
+	if record != "" {
+		eq := quel.Equal(quel.NewIdent("phase", "r"), quel.Arg("record", record))
+		where = quel.And(where, eq)
+	}
+	if source != "" {
+		eq := quel.Equal(quel.NewIdent("source", "r"), quel.Arg("source", source))
+		where = quel.And(where, eq)
+	}
+	return where
 }

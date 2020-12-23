@@ -18,6 +18,19 @@ import (
 	"github.com/midbel/toml"
 )
 
+const (
+	fieldStart   = "dtstart"
+	fieldEnd     = "dtend"
+	fieldChannel = "channel"
+	fieldId      = "id"
+	fieldStatus  = "status"
+	fieldRecord  = "record"
+	fieldSource  = "source"
+	fieldCount   = "limit"
+	fieldPage    = "page"
+	fieldCorrupted = "corrupted"
+)
+
 type Period struct {
 	Starts time.Time `json:"dtstart"`
 	Ends   time.Time `json:"dtend"`
@@ -69,9 +82,9 @@ type GapStore interface {
 	FetchRecords() ([]RecordInfo, error)
 	FetchSources() ([]SourceInfo, error)
 	FetchChannels() ([]ChannelInfo, error)
-	FetchGapsHRD(time.Time, time.Time, string) ([]HRDGap, error)
+	FetchGapsHRD(time.Time, time.Time, string, bool, int, int) (int, []HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
-	FetchGapsVMU(time.Time, time.Time, string, string) ([]VMUGap, error)
+	FetchGapsVMU(time.Time, time.Time, string, string, int, int) (int, []VMUGap, error)
 	FetchGapDetailVMU(int) (VMUGap, error)
 }
 
@@ -84,6 +97,8 @@ type Replay struct {
 	Pass        int       `json:"pass"`
 	Automatic   bool      `json:"automatic"`
 	Cancellable bool      `json:"cancellable"`
+	Missing     int64 `json:"missing"`
+	Corrupted   int64 `json:"corrupted"`
 	Period
 }
 
@@ -103,7 +118,7 @@ type StatusInfo struct {
 type ReplayStore interface {
 	FetchStatus() ([]StatusInfo, error)
 	FetchReplayStats(int) ([]JobStatus, error)
-	FetchReplays(time.Time, time.Time, string) ([]Replay, error)
+	FetchReplays(time.Time, time.Time, string, int, int) (int, []Replay, error)
 	FetchReplayDetail(int) (Replay, error)
 	CancelReplay(int, string) (Replay, error)
 	UpdateReplay(int, int) (Replay, error)
@@ -341,6 +356,12 @@ func wrapHandler(do Handler) http.Handler {
 				code = http.StatusNotImplemented
 			}
 			w.WriteHeader(code)
+			c := struct {
+				Err string `json:"err"`
+			} {
+				Err: err.Error(),
+			}
+			json.NewEncoder(w).Encode(c)
 			return
 		}
 		code := http.StatusOK
@@ -356,16 +377,6 @@ func wrapHandler(do Handler) http.Handler {
 	}
 	return http.HandlerFunc(next)
 }
-
-const (
-	fieldStart   = "dtstart"
-	fieldEnd     = "dtend"
-	fieldChannel = "channel"
-	fieldId      = "id"
-	fieldStatus  = "status"
-	fieldRecord  = "record"
-	fieldSource  = "source"
-)
 
 func listStatus(db Store) Handler {
 	return func(r *http.Request) (interface{}, error) {
@@ -387,9 +398,25 @@ func listRequests(db ReplayStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
 		start, end, err := parsePeriod(r)
 		if err != nil {
-			return nil, fmt.Errorf("%w: err", ErrQuery, err)
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		return db.FetchReplays(start, end, r.URL.Query().Get(fieldStatus))
+		query := r.URL.Query()
+		limit, offset, err := parseLimit(query)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		count, rs, err := db.FetchReplays(start, end, query.Get(fieldStatus), limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		c := struct {
+			Count int `json:"total"`
+			Result []Replay `json:"data"`
+		} {
+			Count: count,
+			Result: rs,
+		}
+		return c, nil
 	}
 }
 
@@ -468,7 +495,22 @@ func listGapsVMU(db GapStore) Handler {
 			return nil, fmt.Errorf("%w: err", ErrQuery, err)
 		}
 		query := r.URL.Query()
-		return db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource))
+		limit, offset, err := parseLimit(query)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		count, rs, err :=  db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource), limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		c := struct {
+			Count int `json:"total"`
+			Result []VMUGap `json:"data"`
+		} {
+			Count: count,
+			Result: rs,
+		}
+		return c, nil
 	}
 }
 
@@ -500,7 +542,24 @@ func listGapsHRD(db GapStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: err", ErrQuery, err)
 		}
-		return db.FetchGapsHRD(start, end, r.URL.Query().Get(fieldChannel))
+		query := r.URL.Query()
+		limit, offset, err := parseLimit(query)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		corrupted, err := parseBoolQuery(query, fieldCorrupted)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		count, rs, err := db.FetchGapsHRD(start, end, query.Get(fieldChannel), corrupted, limit, offset)
+		c := struct {
+			Count int `json:"total"`
+			Result []HRDGap `json:"data"`
+		} {
+			Count: count,
+			Result: rs,
+		}
+		return c, nil
 	}
 }
 
@@ -561,6 +620,29 @@ func parseBody(r *http.Request, body interface{}) error {
 		N: MaxBodySize,
 	}
 	return json.NewDecoder(&rs).Decode(body)
+}
+
+func parseLimit(q url.Values) (int, int, error) {
+	limit, err := parseIntQuery(q, fieldCount)
+	if err != nil {
+		return 0, 0, err
+	}
+	offset, err := parseIntQuery(q, fieldPage)
+	if err != nil {
+		return 0, 0, err
+	}
+	if offset > 0 {
+		offset--
+	}
+	return limit, offset, nil
+}
+
+func parseBoolQuery(q url.Values, field string) (bool, error) {
+	field = q.Get(field)
+	if field == "" {
+		return false, nil
+	}
+	return strconv.ParseBool(field)
 }
 
 func parseIntQuery(q url.Values, field string) (int, error) {

@@ -1,19 +1,36 @@
-create or replace view replay_list(id, timestamp, startdate, enddate, priority, comment, status, automatic, cancellable) as
-WITH
-	cancellable(id) AS (SELECT id FROM replay_status ORDER BY workflow DESC LIMIT 4)
-SELECT
-	r.id,
-	r.timestamp,
-	r.startdate,
-	r.enddate,
-	COALESCE(r.priority, -1) as priority,
-	COALESCE(j.text, '') as comment,
-	s.name,
-	g.replay_id IS NOT NULL as automatic,
-  replay_status_id NOT IN (SELECT * FROM cancellable) as cancellable
-FROM replay AS r
-INNER JOIN (
-	SELECT j.replay_id, j.text, m.replay_status_id FROM replay_job AS j
-    INNER JOIN (SELECT replay_id, MAX(replay_status_id) AS replay_status_id FROM replay_job GROUP BY replay_id) AS m USING (replay_id, replay_status_id)
-) AS j ON r.id = j.replay_id INNER JOIN replay_status AS s ON s.id = j.replay_status_id
-LEFT OUTER JOIN (SELECT DISTINCT replay_id FROM gap_replay_list) AS g ON r.id = g.replay_id
+create or replace view replay_list(id, timestamp, startdate, enddate, priority, comment, status, automatic, cancellable, corrupted, missing) as
+	with
+		cancellable(id) as (select id from replay_status order by workflow desc limit 4),
+	  corrupted(id, count) as (select replay, count(id) from hrd_gap_list group by replay),
+		missing(id, count) as (select replay, sum(next_sequence_count-last_sequence_count) from hrd_gap_list group by replay)
+	select
+		r.id,
+		r.timestamp,
+		r.startdate,
+		r.enddate,
+		coalesce(r.priority, -1) as priority,
+		coalesce(j.text, '') as comment,
+		s.name,
+		g.replay_id is not null as automatic,
+		replay_status_id not in (select * from cancellable) as cancellable,
+	  coalesce(c.count, 0) as corrupted,
+		coalesce(m.count, 0) as missing
+	from replay as r
+		inner join (
+	  	select
+				j.replay_id,
+				j.text,
+				m.replay_status_id
+			from replay_job as j
+	    inner join (
+				select
+					replay_id,
+					max(replay_status_id) as replay_status_id
+				from replay_job
+				group by replay_id
+			) as m using (replay_id, replay_status_id)
+		) as j on r.id = j.replay_id
+		inner join replay_status as s on s.id = j.replay_status_id
+		left outer join (select distinct replay_id from gap_replay_list) as g on r.id = g.replay_id
+	  left outer join corrupted as c on c.id=r.id
+		left outer join missing as m on m.id=r.id
