@@ -48,6 +48,8 @@ type Gap struct {
 	When  time.Time `json:"time"`
 	First int       `json:"first"`
 	Last  int       `json:"last"`
+	Replay int      `json:"replay"`
+	Completed bool  `json:"completed"`
 	Period
 }
 
@@ -84,7 +86,7 @@ type GapStore interface {
 	FetchChannels() ([]ChannelInfo, error)
 	FetchGapsHRD(time.Time, time.Time, string, bool, int, int) (int, []HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
-	FetchGapsVMU(time.Time, time.Time, string, string, int, int) (int, []VMUGap, error)
+	FetchGapsVMU(time.Time, time.Time, string, string, bool, int, int) (int, []VMUGap, error)
 	FetchGapDetailVMU(int) (VMUGap, error)
 }
 
@@ -147,9 +149,17 @@ type ItemInfo struct {
 	Duration int       `json:"duration"`
 }
 
+type PacketInfo struct {
+	Label string `json:"label"`
+	When time.Time `json:"time"`
+	Channel string `json:"channel"`
+	Count int `json:"count"`
+}
+
 type Store interface {
 	Status() (interface{}, error)
 	FetchCounts(int) ([]ItemInfo, error)
+	FetchStatusHRD(int) ([]PacketInfo, error)
 
 	GapStore
 	ReplayStore
@@ -219,6 +229,11 @@ func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 		{
 			URL:     "/stats/items/",
 			Do:      listItemsStats(db),
+			Methods: []string{http.MethodGet},
+		},
+		{
+			URL:     "/stats/packets/",
+			Do:      listStatsHRD(db),
 			Methods: []string{http.MethodGet},
 		},
 		{
@@ -394,6 +409,16 @@ func listItemsStats(db Store) Handler {
 	}
 }
 
+func listStatsHRD(db Store) Handler {
+	return func(r *http.Request) (interface{}, error) {
+		days, err := parseIntQuery(r.URL.Query(), "days")
+		if err != nil {
+			return nil, err
+		}
+		return db.FetchStatusHRD(days)
+	}
+}
+
 func listRequests(db ReplayStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
 		start, end, err := parsePeriod(r)
@@ -499,7 +524,11 @@ func listGapsVMU(db GapStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		count, rs, err :=  db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource), limit, offset)
+		corrupted, err := parseBoolQuery(query, fieldCorrupted)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		count, rs, err :=  db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource), corrupted, limit, offset)
 		if err != nil {
 			return nil, err
 		}
