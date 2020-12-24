@@ -29,6 +29,7 @@ const (
 	fieldCount   = "limit"
 	fieldPage    = "page"
 	fieldCorrupted = "corrupted"
+	fieldCompleted = "completed"
 )
 
 type Period struct {
@@ -84,9 +85,9 @@ type GapStore interface {
 	FetchRecords() ([]RecordInfo, error)
 	FetchSources() ([]SourceInfo, error)
 	FetchChannels() ([]ChannelInfo, error)
-	FetchGapsHRD(time.Time, time.Time, string, bool, int, int) (int, []HRDGap, error)
+	FetchGapsHRD(time.Time, time.Time, string, bool, bool, int, int) (int, []HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
-	FetchGapsVMU(time.Time, time.Time, string, string, bool, int, int) (int, []VMUGap, error)
+	FetchGapsVMU(time.Time, time.Time, string, string, bool, bool, int, int) (int, []VMUGap, error)
 	FetchGapDetailVMU(int) (VMUGap, error)
 }
 
@@ -528,7 +529,11 @@ func listGapsVMU(db GapStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		count, rs, err :=  db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource), corrupted, limit, offset)
+		completed, err := parseBoolQuery(query, fieldCompleted)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		count, rs, err :=  db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource), corrupted, completed, limit, offset)
 		if err != nil {
 			return nil, err
 		}
@@ -580,7 +585,11 @@ func listGapsHRD(db GapStore) Handler {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		count, rs, err := db.FetchGapsHRD(start, end, query.Get(fieldChannel), corrupted, limit, offset)
+		completed, err := parseBoolQuery(query, fieldCompleted)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
+		}
+		count, rs, err := db.FetchGapsHRD(start, end, query.Get(fieldChannel), corrupted, completed, limit, offset)
 		c := struct {
 			Count int `json:"total"`
 			Result []HRDGap `json:"data"`

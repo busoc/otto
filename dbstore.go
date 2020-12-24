@@ -543,14 +543,14 @@ func (s DBStore) FetchChannels() ([]ChannelInfo, error) {
 	})
 }
 
-func (s DBStore) FetchGapsHRD(start time.Time, end time.Time, channel string, corrupted bool, limit, offset int) (int, []HRDGap, error) {
+func (s DBStore) FetchGapsHRD(start time.Time, end time.Time, channel string, corrupted, completed bool, limit, offset int) (int, []HRDGap, error) {
 	start, end, err := s.normalizeInterval(start, end, "hrd_packet_gap", "timestamp")
 	if err != nil {
 		return 0, nil, err
 	}
 
 	var (
-		where = prepareFilterGapHRD(start, end, channel, corrupted)
+		where = prepareFilterGapHRD(start, end, channel, corrupted, completed)
 		count = s.countItems("hrd_gap_list", "r", where)
 	)
 	options := []quel.SelectOption{
@@ -593,14 +593,14 @@ func (s DBStore) FetchGapDetailHRD(id int) (HRDGap, error) {
 	return h, ErrImpl
 }
 
-func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record, source string, corrupted bool, limit, offset int) (int, []VMUGap, error) {
+func (s DBStore) FetchGapsVMU(start time.Time, end time.Time, record, source string, corrupted, completed bool, limit, offset int) (int, []VMUGap, error) {
 	start, end, err := s.normalizeInterval(start, end, "vmu_packet_gap", "timestamp")
 	if err != nil {
 		return 0, nil, err
 	}
 
 	var (
-		where = prepareFilterGapVMU(start, end, record, source, corrupted)
+		where = prepareFilterGapVMU(start, end, record, source, corrupted, completed)
 		count = s.countItems("vmu_gap_list", "g", where)
 	)
 
@@ -826,7 +826,7 @@ func (s DBStore) query(q quel.SQLer, scan func(rows *sql.Rows) error) error {
 	return nil
 }
 
-func prepareFilterGapHRD(start, end time.Time, channel string, corrupted bool) quel.SQLer {
+func prepareFilterGapHRD(start, end time.Time, channel string, corrupted, completed bool) quel.SQLer {
 	var where quel.SQLer
 	if start.IsZero() && !end.IsZero() {
 		where = quel.LesserOrEqual(quel.NewIdent("timestamp", "r"), quel.Arg("dtend", end))
@@ -845,10 +845,14 @@ func prepareFilterGapHRD(start, end time.Time, channel string, corrupted bool) q
 		eq := quel.Equal(quel.NewIdent("corrupted", "r"), quel.NewLiteral(corrupted))
 		where = quel.And(where, eq)
 	}
+	if !completed {
+		eq := quel.Equal(quel.NewIdent("completed", "r"), quel.NewLiteral(completed))
+		where = quel.And(where, eq)
+	}
 	return where
 }
 
-func prepareFilterGapVMU(start, end time.Time, record, source string, corrupted bool) quel.SQLer {
+func prepareFilterGapVMU(start, end time.Time, record, source string, corrupted, completed bool) quel.SQLer {
 	var where quel.SQLer
 	if start.IsZero() && !end.IsZero() {
 		where = quel.LesserOrEqual(quel.NewIdent("timestamp", "g"), quel.Arg("dtend", end))
@@ -869,6 +873,10 @@ func prepareFilterGapVMU(start, end time.Time, record, source string, corrupted 
 	}
 	if !corrupted {
 		eq := quel.Equal(quel.NewIdent("corrupted", "g"), quel.NewLiteral(corrupted))
+		where = quel.And(where, eq)
+	}
+	if !completed {
+		eq := quel.Equal(quel.NewIdent("completed", "g"), quel.NewLiteral(completed))
 		where = quel.And(where, eq)
 	}
 	return where
