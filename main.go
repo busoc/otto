@@ -5,31 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/midbel/toml"
-)
-
-const (
-	fieldStart   = "dtstart"
-	fieldEnd     = "dtend"
-	fieldChannel = "channel"
-	fieldId      = "id"
-	fieldStatus  = "status"
-	fieldRecord  = "record"
-	fieldSource  = "source"
-	fieldCount   = "limit"
-	fieldPage    = "page"
-	fieldCorrupted = "corrupted"
-	fieldCompleted = "completed"
 )
 
 type Period struct {
@@ -45,12 +28,12 @@ func (p Period) isValid() bool {
 }
 
 type Gap struct {
-	Id    int       `json:"id"`
-	When  time.Time `json:"time"`
-	First int       `json:"first"`
-	Last  int       `json:"last"`
-	Replay int      `json:"replay"`
-	Completed bool  `json:"completed"`
+	Id        int       `json:"id"`
+	When      time.Time `json:"time"`
+	First     int       `json:"first"`
+	Last      int       `json:"last"`
+	Replay    int       `json:"replay"`
+	Completed bool      `json:"completed"`
 	Period
 }
 
@@ -85,9 +68,9 @@ type GapStore interface {
 	FetchRecords() ([]RecordInfo, error)
 	FetchSources() ([]SourceInfo, error)
 	FetchChannels() ([]ChannelInfo, error)
-	FetchGapsHRD(time.Time, time.Time, string, bool, bool, int, int) (int, []HRDGap, error)
+	FetchGapsHRD(Criteria) (int, []HRDGap, error)
 	FetchGapDetailHRD(int) (HRDGap, error)
-	FetchGapsVMU(time.Time, time.Time, string, string, bool, bool, int, int) (int, []VMUGap, error)
+	FetchGapsVMU(Criteria) (int, []VMUGap, error)
 	FetchGapDetailVMU(int) (VMUGap, error)
 }
 
@@ -100,8 +83,8 @@ type Replay struct {
 	Pass        int       `json:"pass"`
 	Automatic   bool      `json:"automatic"`
 	Cancellable bool      `json:"cancellable"`
-	Missing     int64 `json:"missing"`
-	Corrupted   int64 `json:"corrupted"`
+	Missing     int64     `json:"missing"`
+	Corrupted   int64     `json:"corrupted"`
 	Period
 }
 
@@ -121,7 +104,7 @@ type StatusInfo struct {
 type ReplayStore interface {
 	FetchStatus() ([]StatusInfo, error)
 	FetchReplayStats(int) ([]JobStatus, error)
-	FetchReplays(time.Time, time.Time, string, int, int) (int, []Replay, error)
+	FetchReplays(Criteria) (int, []Replay, error)
 	FetchReplayDetail(int) (Replay, error)
 	CancelReplay(int, string) (Replay, error)
 	UpdateReplay(int, int) (Replay, error)
@@ -143,18 +126,18 @@ type ConfigStore interface {
 }
 
 type ItemInfo struct {
-	Label string    `json:"label"`
-	Origin string    `json:"origin"`
-	When  time.Time `json:"time"`
-	Count int       `json:"count"`
+	Label    string    `json:"label"`
+	Origin   string    `json:"origin"`
+	When     time.Time `json:"time"`
+	Count    int       `json:"count"`
 	Duration int       `json:"duration"`
 }
 
 type PacketInfo struct {
-	Label string `json:"label"`
-	When time.Time `json:"time"`
-	Channel string `json:"channel"`
-	Count int `json:"count"`
+	Label   string    `json:"label"`
+	When    time.Time `json:"time"`
+	Channel string    `json:"channel"`
+	Count   int       `json:"count"`
 }
 
 type Store interface {
@@ -374,7 +357,7 @@ func wrapHandler(do Handler) http.Handler {
 			w.WriteHeader(code)
 			c := struct {
 				Err string `json:"err"`
-			} {
+			}{
 				Err: err.Error(),
 			}
 			json.NewEncoder(w).Encode(c)
@@ -422,24 +405,19 @@ func listStatsHRD(db Store) Handler {
 
 func listRequests(db ReplayStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
-		start, end, err := parsePeriod(r)
+		query, err := FromRequest(r)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		query := r.URL.Query()
-		limit, offset, err := parseLimit(query)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
-		}
-		count, rs, err := db.FetchReplays(start, end, query.Get(fieldStatus), limit, offset)
+		count, rs, err := db.FetchReplays(query)
 		if err != nil {
 			return nil, err
 		}
 		c := struct {
-			Count int `json:"total"`
+			Count  int      `json:"total"`
 			Result []Replay `json:"data"`
-		} {
-			Count: count,
+		}{
+			Count:  count,
 			Result: rs,
 		}
 		return c, nil
@@ -516,32 +494,19 @@ func registerRequest(db ReplayStore) Handler {
 
 func listGapsVMU(db GapStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
-		start, end, err := parsePeriod(r)
-		if err != nil {
-			return nil, fmt.Errorf("%w: err", ErrQuery, err)
-		}
-		query := r.URL.Query()
-		limit, offset, err := parseLimit(query)
+		query, err := FromRequest(r)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		corrupted, err := parseBoolQuery(query, fieldCorrupted)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
-		}
-		completed, err := parseBoolQuery(query, fieldCompleted)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
-		}
-		count, rs, err :=  db.FetchGapsVMU(start, end, query.Get(fieldRecord), query.Get(fieldSource), corrupted, completed, limit, offset)
+		count, rs, err := db.FetchGapsVMU(query)
 		if err != nil {
 			return nil, err
 		}
 		c := struct {
-			Count int `json:"total"`
+			Count  int      `json:"total"`
 			Result []VMUGap `json:"data"`
-		} {
-			Count: count,
+		}{
+			Count:  count,
 			Result: rs,
 		}
 		return c, nil
@@ -572,29 +537,16 @@ func listSourcesVMU(db GapStore) Handler {
 
 func listGapsHRD(db GapStore) Handler {
 	return func(r *http.Request) (interface{}, error) {
-		start, end, err := parsePeriod(r)
-		if err != nil {
-			return nil, fmt.Errorf("%w: err", ErrQuery, err)
-		}
-		query := r.URL.Query()
-		limit, offset, err := parseLimit(query)
+		query, err := FromRequest(r)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
 		}
-		corrupted, err := parseBoolQuery(query, fieldCorrupted)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
-		}
-		completed, err := parseBoolQuery(query, fieldCompleted)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s", ErrQuery, err)
-		}
-		count, rs, err := db.FetchGapsHRD(start, end, query.Get(fieldChannel), corrupted, completed, limit, offset)
+		count, rs, err := db.FetchGapsHRD(query)
 		c := struct {
-			Count int `json:"total"`
+			Count  int      `json:"total"`
 			Result []HRDGap `json:"data"`
-		} {
-			Count: count,
+		}{
+			Count:  count,
 			Result: rs,
 		}
 		return c, nil
@@ -647,74 +599,4 @@ func registerVariable(db ConfigStore) Handler {
 		}
 		return db.RegisterVariable(v)
 	}
-}
-
-const MaxBodySize = 4 << 20
-
-func parseBody(r *http.Request, body interface{}) error {
-	defer r.Body.Close()
-	rs := io.LimitedReader{
-		R: r.Body,
-		N: MaxBodySize,
-	}
-	return json.NewDecoder(&rs).Decode(body)
-}
-
-func parseLimit(q url.Values) (int, int, error) {
-	limit, err := parseIntQuery(q, fieldCount)
-	if err != nil {
-		return 0, 0, err
-	}
-	offset, err := parseIntQuery(q, fieldPage)
-	if err != nil {
-		return 0, 0, err
-	}
-	if offset > 0 {
-		offset--
-	}
-	return limit, offset, nil
-}
-
-func parseBoolQuery(q url.Values, field string) (bool, error) {
-	field = q.Get(field)
-	if field == "" {
-		return false, nil
-	}
-	return strconv.ParseBool(field)
-}
-
-func parseIntQuery(q url.Values, field string) (int, error) {
-	field = q.Get(field)
-	if field == "" {
-		return 0, nil
-	}
-	return strconv.Atoi(field)
-}
-
-func parseInt(r *http.Request, field string) (int, error) {
-	vars := mux.Vars(r)
-	return strconv.Atoi(vars[field])
-}
-
-func parsePeriod(r *http.Request) (time.Time, time.Time, error) {
-	var (
-		start time.Time
-		end   time.Time
-		err   error
-		query = r.URL.Query()
-		str   string
-	)
-	str = query.Get(fieldStart)
-	if start, err = parseDatetime(str); err != nil && str != "" {
-		return start, end, err
-	}
-	str = query.Get(fieldEnd)
-	if end, err = parseDatetime(str); err != nil && str != "" {
-		return start, end, err
-	}
-	return start, end, nil
-}
-
-func parseDatetime(str string) (time.Time, error) {
-	return time.Parse(time.RFC3339, str)
 }
