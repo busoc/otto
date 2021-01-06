@@ -2,7 +2,7 @@ package main
 
 import (
 	"net/http"
-  "strings"
+	"strings"
 
 	"github.com/midbel/quel"
 )
@@ -132,7 +132,7 @@ func (c Criteria) filterDates(alias string) quel.SQLer {
 		where = quel.And(fst, lst)
 	} else {
 
-  }
+	}
 	return where
 }
 
