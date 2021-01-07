@@ -209,6 +209,14 @@ create or replace view replay_job_list(replay, text, status) as
 	join latest_status s on j.replay_id=s.replay and j.replay_status_id=s.status
 	where j.timestamp >= (select date from days_back);
 
+create or replace view automatic_replay_list(replay, total) as
+	select
+		replay,
+		count(replay)
+	from hrd_gap_list
+	where timestamp >= (select date from days_back)
+	group by replay;
+
 create or replace view replay_list(id, timestamp, startdate, enddate, priority, comment, status, automatic, cancellable, corrupted, missing) as
 	select
 		r.id,
@@ -226,7 +234,7 @@ create or replace view replay_list(id, timestamp, startdate, enddate, priority, 
 	from replay as r
 		inner join replay_job_list as j on r.id = j.replay
 		inner join replay_status as s on s.id = j.status
-		left outer join hrd_gap_list as g on r.id=g.replay
+		left outer join automatic_replay_list as g on r.id=g.replay
 	  left outer join corrupted_hrd_list as c on c.id=r.id
 		left outer join missing_hrd_list as m on m.id=r.id
 		where r.timestamp >= (select date from days_back);
