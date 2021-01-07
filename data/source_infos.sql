@@ -4,6 +4,7 @@ create or replace view source_infos(source, total) as
       vmu_record_id,
       count(vmu_record_id)
     from vmu_packet_gap
+    where timestamp >= (select date from days_back)
     group by vmu_record_id
   )
   select
@@ -12,4 +13,4 @@ create or replace view source_infos(source, total) as
   from vmu_record r
   join records g on r.id=g.record_id
   where r.source is not null
-  group by r.source
+  group by r.source;

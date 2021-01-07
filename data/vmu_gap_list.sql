@@ -15,3 +15,4 @@ from vmu_packet_gap g
   join vmu_record r on g.vmu_record_id=r.id
 	join gap_replay_list h using (hrd_packet_gap_id)
 	left outer join completed_replays c on c.id=h.replay_id
+	where g.timestamp >= (select date from days_back);

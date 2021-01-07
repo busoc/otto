@@ -27,10 +27,13 @@ create or replace view replay_list(id, timestamp, startdate, enddate, priority, 
 					replay_id,
 					max(replay_status_id) as replay_status_id
 				from replay_job
+				where timestamp >= (select date from days_back)
 				group by replay_id
 			) as m using (replay_id, replay_status_id)
+			where timestamp >= (select date from days_back)
 		) as j on r.id = j.replay_id
 		inner join replay_status as s on s.id = j.replay_status_id
 		left outer join (select distinct replay_id from gap_replay_list) as g on r.id = g.replay_id
 	  left outer join corrupted as c on c.id=r.id
 		left outer join missing as m on m.id=r.id
+		where r.timestamp >= (select date from days_back);

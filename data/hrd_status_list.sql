@@ -15,4 +15,4 @@ create or replace view hrd_status_list(label, timestamp, channel, count) as
     sum(next_sequence_count-last_sequence_count)
   from hrd_gap_list
   where not corrupted
-  group by date, channel
+  group by date, channel;

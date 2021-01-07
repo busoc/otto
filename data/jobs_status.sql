@@ -35,4 +35,4 @@ select
 	count(replay) as total
 from latest_status
 where status in (select workflow from running)
-group by date
+group by date;

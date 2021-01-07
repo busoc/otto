@@ -8,6 +8,7 @@ create or replace view items_count(label, origin, date, count, missing, duration
     sum(unix_timestamp(enddate) - unix_timestamp(startdate)) as duration
   from replay
   where enddate > startdate
+    and replay.timestamp >= (select date from days_back)
   group by date
   union all
   select
@@ -19,6 +20,7 @@ create or replace view items_count(label, origin, date, count, missing, duration
     sum(unix_timestamp(next_timestamp) - unix_timestamp(last_timestamp)) as duration
   from hrd_packet_gap
   where next_timestamp > last_timestamp
+    and hrd_packet_gap.timestamp >= (select date from days_back)
   group by date, chanel
   union all
   select
@@ -31,4 +33,5 @@ create or replace view items_count(label, origin, date, count, missing, duration
   from vmu_packet_gap as g
     inner join vmu_record as r on g.vmu_record_id=r.id
   where next_timestamp > last_timestamp
-  group by date, r.source
+    and g.timestamp >= (select date from days_back)
+  group by date, r.source;
