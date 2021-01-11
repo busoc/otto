@@ -35,7 +35,7 @@ create or replace view latest_status(replay, date, status) as
 create or replace view recent_status(replay, date, status) as
 	select
 		replay_id,
-		date(timestamp) as date,
+		max(timestamp),
 		max(replay_status_id) as replay_status_id
 	from replay_job
 	where timestamp >= (select date from days_back)
