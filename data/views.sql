@@ -32,6 +32,16 @@ create or replace view latest_status(replay, date, status) as
   group by date, replay_id
   order by replay_id;
 
+create or replace view recent_status(replay, date, status) as
+	select
+		replay_id,
+		date(timestamp) as date,
+		max(replay_status_id) as replay_status_id
+	from replay_job
+	where timestamp >= (select date from days_back)
+	group by replay_id
+	order by replay_id;
+
 create or replace view completed_replays(id) as
 	select
 		replay_id
@@ -206,7 +216,7 @@ create or replace view replay_job_list(replay, text, status) as
 		j.text,
 		j.replay_status_id
 	from replay_job j
-	join latest_status s on j.replay_id=s.replay and j.replay_status_id=s.status
+	join recent_status s on j.replay_id=s.replay and j.replay_status_id=s.status
 	where j.timestamp >= (select date from days_back);
 
 create or replace view automatic_replay_list(replay, total) as
