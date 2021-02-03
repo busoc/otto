@@ -40,6 +40,7 @@ func (s DBStore) Status() (interface{}, error) {
 		"autobrm": s.mon.readProcess(),
 		"requests": map[string]interface{}{
 			"count": s.countRequests(where),
+			"duration": s.pendingTime(),
 		},
 		"hrd": map[string]interface{}{
 			"count": s.countGapsHRD(where),
@@ -179,6 +180,9 @@ func (s DBStore) FetchReplays(query Criteria) (int, []Replay, error) {
 		if err = rows.Scan(&r.Id, &r.When, &r.Starts, &r.Ends, &r.Priority, &r.Comment, &r.Status, &r.Automatic, &r.Cancellable, &r.Corrupted, &r.Missing); err == nil {
 			vs = append(vs, r)
 		}
+		r.When = r.When.UTC()
+		r.Starts = r.Starts.UTC()
+		r.Ends = r.Ends.UTC()
 		return err
 	})
 }
@@ -300,6 +304,9 @@ func (s DBStore) FetchGapsHRD(query Criteria) (int, []HRDGap, error) {
 		if err = rows.Scan(&g.Id, &g.When, &g.Starts, &g.First, &g.Ends, &g.Last, &g.Channel, &g.Replay, &g.Completed); err == nil {
 			vs = append(vs, g)
 		}
+		g.When = g.When.UTC()
+		g.Starts = g.Starts.UTC()
+		g.Ends = g.Ends.UTC()
 		return err
 	})
 }
@@ -329,6 +336,9 @@ func (s DBStore) FetchGapsVMU(query Criteria) (int, []VMUGap, error) {
 		if err = rows.Scan(&g.Id, &g.When, &g.Starts, &g.First, &g.Ends, &g.Last, &g.Source, &g.UPI, &g.Replay, &g.Completed); err == nil {
 			vs = append(vs, g)
 		}
+		g.When = g.When.UTC()
+		g.Starts = g.Starts.UTC()
+		g.Ends = g.Ends.UTC()
 		return err
 	})
 }
@@ -567,6 +577,22 @@ func (s DBStore) registerReplayJob(tx *sql.Tx, r *Replay) error {
 
 func (s DBStore) countRequests(where quel.SQLer) int {
 	return s.countItems("replay", "r", where)
+}
+
+func (s DBStore) pendingTime() int {
+	q, err := quel.NewSelect("pending_duration", quel.SelectColumn(quel.NewIdent("duration")))
+	if err != nil {
+		return 0
+	}
+	query, args, err := q.SQL()
+	if err != nil {
+		return 0
+	}
+	var count int
+	if err := s.db.QueryRow(query, args...).Scan(&count); err != nil {
+		return count
+	}
+	return count
 }
 
 func (s DBStore) countGapsHRD(where quel.SQLer) int {

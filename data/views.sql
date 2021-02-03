@@ -17,10 +17,11 @@ create or replace view exited_workflows(wf) as
 	select workflow from replay_status order by workflow desc limit 4 offset 1;
 
 create or replace view running_workflows(wf) as
-	select workflow
+	select
+		workflow
 	from replay_status
 	where workflow <> (select wf from pending_workflow)
-		and workflow not in (select workflow from completed_workflows);
+		or workflow not in (select wf from completed_workflows);
 
 create or replace view latest_status(replay, date, status) as
   select
@@ -210,11 +211,12 @@ create or replace view missing_hrd_list(id, total) as
 	where timestamp >= (select date from days_back)
 	group by replay;
 
-create or replace view replay_job_list(replay, text, status) as
+create or replace view replay_job_list(replay, text, status, timestamp) as
 	select
 		j.replay_id,
 		j.text,
-		j.replay_status_id
+		j.replay_status_id,
+		j.timestamp
 	from replay_job j
 	join recent_status s on j.replay_id=s.replay and j.replay_status_id=s.status
 	where j.timestamp >= (select date from days_back);
@@ -230,7 +232,7 @@ create or replace view automatic_replay_list(replay, total) as
 create or replace view replay_list(id, timestamp, startdate, enddate, priority, comment, status, automatic, cancellable, corrupted, missing) as
 	select
 		r.id,
-		r.timestamp,
+		j.timestamp,
 		r.startdate,
 		r.enddate,
 		coalesce(r.priority, -1) as priority,
@@ -267,3 +269,20 @@ from vmu_packet_gap g
 	join gap_replay_list h using (hrd_packet_gap_id)
 	left outer join completed_replays c on c.id=h.replay_id
 	where g.timestamp >= (select date from days_back);
+
+
+create or replace view max_latest_status(replay,date,status) as
+	select
+		replay,
+		max(date),
+		max(status)
+	from latest_status
+	group by replay;
+
+create or replace view pending_duration(duration) as
+	select
+		coalesce(sum(unix_timestamp(r.enddate)-unix_timestamp(r.startdate)), 0)
+	from max_latest_status s
+		join replay r on s.replay=r.id
+        join replay_status rs on rs.id=s.status
+	where rs.workflow not in (select wf from completed_workflows);
