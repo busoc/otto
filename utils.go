@@ -84,5 +84,15 @@ func parsePeriod(r *http.Request) (time.Time, time.Time, error) {
 }
 
 func parseDatetime(str string) (time.Time, error) {
-	return time.Parse(time.RFC3339, str)
+	var (
+		when time.Time
+		err  error
+	)
+	for _, pat := range []string{time.RFC3339, "2006.002.15.04.05"} {
+		when, err = time.Parse(pat, str)
+		if err == nil {
+			break
+		}
+	}
+	return when, err
 }
