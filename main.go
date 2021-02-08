@@ -300,11 +300,6 @@ func setupRoutes(db Store, site, url string, origins []string) http.Handler {
 			Do:      updateVariable(db),
 			Methods: []string{http.MethodPut},
 		},
-		{
-			URL:     "",
-			Do:      nil,
-			Methods: []string{},
-		},
 	}
 	r := mux.NewRouter()
 	if site != "" {
