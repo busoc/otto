@@ -241,14 +241,14 @@ create or replace view replay_list(id, timestamp, startdate, enddate, priority, 
 		g.replay is not null as automatic,
 		-- replay_status_id not in (select * from cancellable) as cancellable,
 		s.workflow not in (select wf from completed_workflows) as cancellable,
-	  coalesce(c.total, 0) as corrupted,
-		coalesce(m.total, 0) as missing
+	  0 as corrupted,
+		0 as missing
 	from replay as r
 		inner join replay_job_list as j on r.id = j.replay
 		inner join replay_status as s on s.id = j.status
 		left outer join automatic_replay_list as g on r.id=g.replay
-	  left outer join corrupted_hrd_list as c on c.id=r.id
-		left outer join missing_hrd_list as m on m.id=r.id
+	  -- left outer join corrupted_hrd_list as c on c.id=r.id
+		-- left outer join missing_hrd_list as m on m.id=r.id
 		where r.timestamp >= (select date from days_back);
 
 create or replace view vmu_gap_list(id, timestamp, last_sequence_count, last_timestamp, next_sequence_count, next_timestamp, source, phase, corrupted, replay, completed) as
