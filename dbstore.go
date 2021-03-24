@@ -561,7 +561,7 @@ func (s DBStore) registerReplay(tx *sql.Tx, r *Replay) error {
 		return err
 	}
 	retrieve := []quel.SelectOption{
-		quel.SelectColumn(quel.Func("LAST_INSERT_ID")),
+		quel.SelectColumn(quel.Func("last_insert_rowid")),
 		quel.SelectLimit(1),
 	}
 	q, err := quel.NewSelect("replay", retrieve...)
