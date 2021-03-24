@@ -118,9 +118,11 @@ func (s DBStore) FetchCounts(days int) ([]ItemInfo, error) {
 	return vs, s.query(q, func(rows *sql.Rows) error {
 		var (
 			i   ItemInfo
+			when string
 			err error
 		)
-		if err = rows.Scan(&i.Label, &i.Origin, &i.When, &i.Count, &i.Duration); err == nil {
+		if err = rows.Scan(&i.Label, &i.Origin, &when, &i.Count, &i.Duration); err == nil {
+			i.When, _ = time.Parse("2006-01-02", when)
 			vs = append(vs, i)
 		}
 		return err
