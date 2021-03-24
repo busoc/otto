@@ -30,7 +30,7 @@ drop view if exists pending_duration;
 create view apidaysback(day) as
 	select ifnull((select value from variable where name='api_days_back' limit 1), 15);
 
-create view days_back(day) as
+create view days_back(date) as
 	select date(current_date, (select -day || ' days' from apidaysback));
 
 create view completed_workflows(wf) as

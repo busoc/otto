@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
+	"path/filepath"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -47,7 +49,7 @@ func (s DBStore) Status() (interface{}, error) {
 	status := map[string]interface{}{
 		"autobrm": s.mon.readProcess(),
 		"requests": map[string]interface{}{
-			"count": s.countRequests(where),
+			"count":    s.countRequests(where),
 			"duration": s.pendingTime(),
 		},
 		"hrd": map[string]interface{}{
@@ -65,7 +67,7 @@ func (s DBStore) FetchStatusHRD(days int) ([]PacketInfo, error) {
 		days = 30
 	}
 	var (
-		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.Days(days))
+		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.NewLiteral(fmt.Sprintf("-%d days", days)))
 		options = []quel.SelectOption{
 			quel.SelectColumn(quel.NewIdent("label")),
 			quel.SelectColumn(quel.NewIdent("timestamp")),
