@@ -67,7 +67,7 @@ func (s DBStore) FetchStatusHRD(days int) ([]PacketInfo, error) {
 		days = 30
 	}
 	var (
-		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.NewLiteral(fmt.Sprintf("-%d days", days)))
+		expr    = quel.Func("DATE", quel.NewIdent("CURRENT_DATE"), quel.NewLiteral(fmt.Sprintf("-%d days", days)))
 		options = []quel.SelectOption{
 			quel.SelectColumn(quel.NewIdent("label")),
 			quel.SelectColumn(quel.NewIdent("timestamp")),
@@ -98,7 +98,7 @@ func (s DBStore) FetchCounts(days int) ([]ItemInfo, error) {
 		days = 30
 	}
 	var (
-		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.Days(days))
+		expr    = quel.Func("DATE", quel.NewIdent("CURRENT_DATE"), quel.NewLiteral(fmt.Sprintf("-%d days", days)))
 		options = []quel.SelectOption{
 			quel.SelectColumn(quel.NewIdent("label")),
 			quel.SelectColumn(quel.NewIdent("origin")),
@@ -149,7 +149,7 @@ func (s DBStore) FetchReplayStats(days int) ([]JobStatus, error) {
 		days = 30
 	}
 	var (
-		expr    = quel.Func("DATE_SUB", quel.NewIdent("CURRENT_DATE"), quel.Days(days))
+		expr    = quel.Func("DATE", quel.NewIdent("CURRENT_DATE"), quel.NewLiteral(fmt.Sprintf("-%d days", days)))
 		options = []quel.SelectOption{
 			quel.SelectColumns("label", "timestamp", "count"),
 			quel.SelectWhere(quel.GreaterOrEqual(quel.NewIdent("timestamp"), expr)),
