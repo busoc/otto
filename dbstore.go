@@ -84,9 +84,11 @@ func (s DBStore) FetchStatusHRD(days int) ([]PacketInfo, error) {
 	return vs, s.query(q, func(rows *sql.Rows) error {
 		var (
 			i   PacketInfo
+			when string
 			err error
 		)
-		if err = rows.Scan(&i.Label, &i.When, &i.Channel, &i.Count); err == nil {
+		if err = rows.Scan(&i.Label, &when, &i.Channel, &i.Count); err == nil {
+			i.When, _ = time.Parse("2006-01-02", when)
 			vs = append(vs, i)
 		}
 		return err

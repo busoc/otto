@@ -134,7 +134,7 @@ create view items_count(label, origin, date, count, missing, duration) as
     date(timestamp) as date,
     count(id) as total,
     0,
-    sum(unix_timestamp(enddate) - unix_timestamp(startdate)) as duration
+    sum(strftime('%s', enddate) - strftime('%s', startdate)) as duration
   from replay
   where enddate > startdate
     and replay.timestamp >= (select date from days_back)
@@ -146,7 +146,7 @@ create view items_count(label, origin, date, count, missing, duration) as
     date(timestamp) as date,
     count(id) as total,
     sum(next_sequence_count-last_sequence_count),
-    sum(unix_timestamp(next_timestamp) - unix_timestamp(last_timestamp)) as duration
+    sum(strftime('%s', next_timestamp) - strftime('%s', last_timestamp)) as duration
   from hrd_packet_gap
   where next_timestamp > last_timestamp
     and hrd_packet_gap.timestamp >= (select date from days_back)
@@ -158,7 +158,7 @@ create view items_count(label, origin, date, count, missing, duration) as
     date(g.timestamp) as date,
     count(g.id) as total,
     sum(next_sequence_count-last_sequence_count),
-    sum(unix_timestamp(next_timestamp) - unix_timestamp(last_timestamp)) as duration
+    sum(strftime('%s', next_timestamp) - strftime('%s', last_timestamp)) as duration
   from vmu_packet_gap as g
     inner join vmu_record as r on g.vmu_record_id=r.id
   where next_timestamp > last_timestamp
@@ -310,7 +310,7 @@ create view max_latest_status(replay,date,status) as
 
 create view pending_duration(duration) as
 	select
-		coalesce(sum(unix_timestamp(r.enddate)-unix_timestamp(r.startdate)), 0)
+		coalesce(sum(strftime('%s', r.enddate)-strftime('%s', r.startdate)), 0)
 	from max_latest_status s
 		join replay r on s.replay=r.id
         join replay_status rs on rs.id=s.status
