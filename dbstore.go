@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/midbel/quel"
 )
 
@@ -18,8 +19,15 @@ type DBStore struct {
 }
 
 func NewDBStore(addr, name, user, passwd string, mon Monitor) (Store, error) {
-	addr = fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true", user, passwd, addr, name)
-	db, err := sql.Open("mysql", addr)
+	var driver string
+	if _, _, err := net.SplitHostPort(addr); err == nil {
+		addr = fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true", user, passwd, addr, name)
+		driver = "mysql"
+	} else {
+		addr = filepath.Join(addr, name)
+		driver = "sqlite3"
+	}
+	db, err := sql.Open(driver, addr)
 	if err != nil {
 		return nil, fmt.Errorf("fail to connect: %w", err)
 	}

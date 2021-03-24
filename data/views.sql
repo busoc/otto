@@ -1,29 +1,58 @@
-create or replace view apidaysback(day) as
+drop view if exists apidaysback;
+drop view if exists days_back;
+drop view if exists completed_workflows;
+drop view if exists pending_workflows;
+drop view if exists pending_workflow;
+drop view if exists cancelled_workflows;
+drop view if exists cancelled_workflow;
+drop view if exists exited_workflows;
+drop view if exists running_workflows;
+drop view if exists latest_status;
+drop view if exists recent_status;
+drop view if exists completed_replays;
+drop view if exists channel_infos;
+drop view if exists hrd_gap_list;
+drop view if exists hrd_status_list;
+drop view if exists items_count;
+drop view if exists jobs_status;
+drop view if exists records_count;
+drop view if exists record_infos;
+drop view if exists source_infos;
+drop view if exists corrupted_hrd_list;
+drop view if exists missing_hrd_list;
+drop view if exists replay_job_list;
+drop view if exists automatic_replay_list;
+drop view if exists replay_list;
+drop view if exists vmu_gap_list;
+drop view if exists max_latest_status;
+drop view if exists pending_duration;
+
+create view apidaysback(day) as
 	select ifnull((select value from variable where name='api_days_back' limit 1), 15);
 
-create or replace view days_back(date) as
-	select date_sub(current_date(), interval (select day from apidaysback) DAY);
+create view days_back(day) as
+	select date(current_date, (select -day || ' days' from apidaysback));
 
-create or replace view completed_workflows(wf) as
+create view completed_workflows(wf) as
 	select workflow from replay_status order by workflow desc limit 4;
 
-create or replace view pending_workflow(wf) as
+create view pending_workflow(wf) as
 	select min(workflow) from replay_status;
 
-create or replace view cancelled_workflow(wf) as
+create view cancelled_workflow(wf) as
 	select max(workflow) from replay_status;
 
-create or replace view exited_workflows(wf) as
+create view exited_workflows(wf) as
 	select workflow from replay_status order by workflow desc limit 4 offset 1;
 
-create or replace view running_workflows(wf) as
+create view running_workflows(wf) as
 	select
 		workflow
 	from replay_status
 	where workflow <> (select wf from pending_workflow)
 		or workflow not in (select wf from completed_workflows);
 
-create or replace view latest_status(replay, date, status) as
+create view latest_status(replay, date, status) as
   select
     replay_id,
     date(timestamp) as date,
@@ -33,7 +62,7 @@ create or replace view latest_status(replay, date, status) as
   group by date, replay_id
   order by replay_id;
 
-create or replace view recent_status(replay, date, status) as
+create view recent_status(replay, date, status) as
 	select
 		replay_id,
 		max(timestamp),
@@ -43,7 +72,7 @@ create or replace view recent_status(replay, date, status) as
 	group by replay_id
 	order by replay_id;
 
-create or replace view completed_replays(id) as
+create view completed_replays(id) as
 	select
 		replay_id
 	from replay_job
@@ -54,7 +83,7 @@ create or replace view completed_replays(id) as
 		where workflow in (select wf from completed_workflows)
 	);
 
-create or replace view channel_infos(channel, total) as
+create view channel_infos(channel, total) as
   select
     chanel,
     count(chanel)
@@ -62,7 +91,7 @@ create or replace view channel_infos(channel, total) as
   where timestamp >= (select date from days_back)
   group by chanel;
 
-create or replace view hrd_gap_list(id, timestamp, channel, last_sequence_count, last_timestamp, next_sequence_count, next_timestamp, corrupted, completed, replay) as
+create view hrd_gap_list(id, timestamp, channel, last_sequence_count, last_timestamp, next_sequence_count, next_timestamp, corrupted, completed, replay) as
 select
   h.id,
   h.timestamp,
@@ -79,7 +108,7 @@ from hrd_packet_gap h
   left outer join completed_replays r on r.id=i.replay_id
   where h.timestamp >= (select date from days_back);
 
-create or replace view hrd_status_list(label, timestamp, channel, count) as
+create view hrd_status_list(label, timestamp, channel, count) as
   select
     'CORRUPTED',
     date(timestamp) as date,
@@ -98,7 +127,7 @@ create or replace view hrd_status_list(label, timestamp, channel, count) as
   where not corrupted
   group by date, channel;
 
-create or replace view items_count(label, origin, date, count, missing, duration) as
+create view items_count(label, origin, date, count, missing, duration) as
   select
     'REPLAY' as label,
     'ALL' as origin,
@@ -136,7 +165,7 @@ create or replace view items_count(label, origin, date, count, missing, duration
     and g.timestamp >= (select date from days_back)
   group by date, r.source;
 
-create or replace view jobs_status (label, timestamp, count) as
+create view jobs_status (label, timestamp, count) as
 select
 	'PENDING' as label,
 	date,
@@ -169,7 +198,7 @@ from latest_status
 where status in (select wf from running_workflows)
 group by date;
 
-create or replace view records_count(id, total) as
+create view records_count(id, total) as
 	select
 		vmu_record_id,
 		count(vmu_record_id)
@@ -177,7 +206,7 @@ create or replace view records_count(id, total) as
 	where timestamp >= (select date from days_back)
 	group by vmu_record_id;
 
-create or replace view source_infos(source, total) as
+create view source_infos(source, total) as
   select
     r.source,
     sum(g.total)
@@ -186,7 +215,7 @@ create or replace view source_infos(source, total) as
   where r.source is not null
   group by r.source;
 
-create or replace view record_infos(phase, total) as
+create view record_infos(phase, total) as
   select
     r.phase,
     sum(g.total)
@@ -195,7 +224,7 @@ create or replace view record_infos(phase, total) as
   where r.phase is not null
   group by r.phase;
 
-create or replace view corrupted_hrd_list(id, total) as
+create view corrupted_hrd_list(id, total) as
 	select
 		replay,
 		count(id)
@@ -203,7 +232,7 @@ create or replace view corrupted_hrd_list(id, total) as
 	where corrupted and timestamp >= (select date from days_back)
 	group by replay;
 
-create or replace view missing_hrd_list(id, total) as
+create view missing_hrd_list(id, total) as
 	select
 		replay,
 		sum(next_sequence_count-last_sequence_count)
@@ -211,7 +240,7 @@ create or replace view missing_hrd_list(id, total) as
 	where timestamp >= (select date from days_back)
 	group by replay;
 
-create or replace view replay_job_list(replay, text, status, timestamp) as
+create view replay_job_list(replay, text, status, timestamp) as
 	select
 		j.replay_id,
 		j.text,
@@ -221,7 +250,7 @@ create or replace view replay_job_list(replay, text, status, timestamp) as
 	join recent_status s on j.replay_id=s.replay and j.replay_status_id=s.status
 	where j.timestamp >= (select date from days_back);
 
-create or replace view automatic_replay_list(replay, total) as
+create view automatic_replay_list(replay, total) as
 	select
 		replay,
 		count(replay)
@@ -229,7 +258,7 @@ create or replace view automatic_replay_list(replay, total) as
 	where timestamp >= (select date from days_back)
 	group by replay;
 
-create or replace view replay_list(id, timestamp, startdate, enddate, priority, comment, status, automatic, cancellable, corrupted, missing) as
+create view replay_list(id, timestamp, startdate, enddate, priority, comment, status, automatic, cancellable, corrupted, missing) as
 	select
 		r.id,
 		j.timestamp,
@@ -251,7 +280,7 @@ create or replace view replay_list(id, timestamp, startdate, enddate, priority, 
 		-- left outer join missing_hrd_list as m on m.id=r.id
 		where r.timestamp >= (select date from days_back);
 
-create or replace view vmu_gap_list(id, timestamp, last_sequence_count, last_timestamp, next_sequence_count, next_timestamp, source, phase, corrupted, replay, completed) as
+create view vmu_gap_list(id, timestamp, last_sequence_count, last_timestamp, next_sequence_count, next_timestamp, source, phase, corrupted, replay, completed) as
 select
 	g.id,
   g.timestamp,
@@ -271,7 +300,7 @@ from vmu_packet_gap g
 	where g.timestamp >= (select date from days_back);
 
 
-create or replace view max_latest_status(replay,date,status) as
+create view max_latest_status(replay,date,status) as
 	select
 		replay,
 		max(date),
@@ -279,7 +308,7 @@ create or replace view max_latest_status(replay,date,status) as
 	from latest_status
 	group by replay;
 
-create or replace view pending_duration(duration) as
+create view pending_duration(duration) as
 	select
 		coalesce(sum(unix_timestamp(r.enddate)-unix_timestamp(r.startdate)), 0)
 	from max_latest_status s

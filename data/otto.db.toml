@@ -1,4 +1,4 @@
-addr = ":9000"
+addr  = ":9000"
 quiet = false
 
 [autobrm]
@@ -7,10 +7,7 @@ proc    = 'tmp\otto\proc'
 
 [database]
 database = 'autobrm'
-addr = "127.0.0.1:3306"
-user = "dev"
-passwd = "adbf;emo"
+addr     = "127.0.0.1:3306"
+user     = "dev"
+passwd   = "adbf;emo"
 
-# [site]
-# dir = 'D:\Play\www\obbo\dist'
-# url = "/"
