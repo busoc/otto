@@ -163,9 +163,11 @@ func (s DBStore) FetchReplayStats(days int) ([]JobStatus, error) {
 	return vs, s.query(q, func(rows *sql.Rows) error {
 		var (
 			j   JobStatus
+			when string
 			err error
 		)
-		if err = rows.Scan(&j.Status, &j.When, &j.Count); err == nil {
+		if err = rows.Scan(&j.Status, &when, &j.Count); err == nil {
+			j.When, _ = time.Parse("2006-01-02", when)
 			vs = append(vs, j)
 		}
 		return err
