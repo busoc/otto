@@ -220,7 +220,7 @@ func (s DBStore) CancelReplay(id int, comment string) (Replay, error) {
 	tx, err := s.db.Begin()
 	options := []quel.InsertOption{
 		quel.InsertColumns("timestamp", "replay_id", "replay_status_id", "text"),
-		quel.InsertValues(quel.Now(), quel.Arg("id", id), get, quel.Arg("comment", comment)),
+		quel.InsertValues(quel.Func("date", quel.NewLiteral("now")), quel.Arg("id", id), get, quel.Arg("comment", comment)),
 	}
 	i, err := quel.NewInsert("replay_job", options...)
 	if err == nil {
@@ -551,7 +551,7 @@ func (s DBStore) retrReplay(id int, r *Replay) error {
 func (s DBStore) registerReplay(tx *sql.Tx, r *Replay) error {
 	insert := []quel.InsertOption{
 		quel.InsertColumns("timestamp", "startdate", "enddate", "priority"),
-		quel.InsertValues(quel.Now(), quel.Arg("dtstart", r.Starts), quel.Arg("dtend", r.Ends), quel.Arg("priority", r.Priority)),
+		quel.InsertValues(quel.Func("date", quel.NewLiteral("now")), quel.Arg("dtstart", r.Starts), quel.Arg("dtend", r.Ends), quel.Arg("priority", r.Priority)),
 	}
 	i, err := quel.NewInsert("replay", insert...)
 	if err != nil {
@@ -582,7 +582,7 @@ func (s DBStore) registerReplayJob(tx *sql.Tx, r *Replay) error {
 	}
 	options := []quel.InsertOption{
 		quel.InsertColumns("timestamp", "text", "replay_id", "replay_status_id"),
-		quel.InsertValues(quel.Now(), quel.Arg("comment", r.Comment), quel.Arg("replay", r.Id), get),
+		quel.InsertValues(quel.Func("date", quel.NewLiteral("now")), quel.Arg("comment", r.Comment), quel.Arg("replay", r.Id), get),
 	}
 	i, err := quel.NewInsert("replay_job", options...)
 	if err == nil {
