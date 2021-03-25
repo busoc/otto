@@ -6,7 +6,7 @@ pidfile = 'tmp\otto\autobrm.pid'
 proc    = 'tmp\otto\proc'
 
 [database]
-database = 'autobrm'
-addr     = "127.0.0.1:3306"
+database = 'fsl_hrd.db'
+addr     = "tmp"
 user     = "dev"
 passwd   = "adbf;emo"

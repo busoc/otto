@@ -45,7 +45,7 @@ func NewDBStore(addr, name, user, passwd string, mon Monitor) (Store, error) {
 }
 
 func (s DBStore) Status() (interface{}, error) {
-	where := quel.Equal(quel.NewIdent("timestamp"), quel.Func("current_date"))
+	where := quel.Equal(quel.Func("date", quel.NewIdent("timestamp")), quel.NewIdent("current_date"))
 	status := map[string]interface{}{
 		"autobrm": s.mon.readProcess(),
 		"requests": map[string]interface{}{
@@ -632,6 +632,7 @@ func (s DBStore) countItems(table, alias string, where quel.SQLer) int {
 		return 0
 	}
 	query, args, err := q.SQL()
+	fmt.Println(query, args, err)
 	if err != nil {
 		return 0
 	}
