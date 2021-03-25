@@ -220,7 +220,7 @@ func (s DBStore) CancelReplay(id int, comment string) (Replay, error) {
 	tx, err := s.db.Begin()
 	options := []quel.InsertOption{
 		quel.InsertColumns("timestamp", "replay_id", "replay_status_id", "text"),
-		quel.InsertValues(quel.Func("date", quel.NewLiteral("now")), quel.Arg("id", id), get, quel.Arg("comment", comment)),
+		quel.InsertValues(quel.Func("datetime", quel.NewLiteral("now")), quel.Arg("id", id), get, quel.Arg("comment", comment)),
 	}
 	i, err := quel.NewInsert("replay_job", options...)
 	if err == nil {
