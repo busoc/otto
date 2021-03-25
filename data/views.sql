@@ -131,39 +131,39 @@ create view items_count as
   select
     'REPLAY' as 'label',
     'ALL' as 'origin',
-    date(timestamp) as 'date',
-    count(id) as 'count',
+    date(r.timestamp) as 'date',
+    count(r.id) as 'count',
     0 as 'missing',
-    sum(strftime('%s', enddate) - strftime('%s', startdate)) as 'duration'
-  from replay
-  where enddate > startdate
-    and replay.timestamp >= (select date from days_back)
-  group by date(timestamp)
+    sum(strftime('%s', r.enddate) - strftime('%s', r.startdate)) as 'duration'
+  from replay r
+  where r.enddate > r.startdate
+    and r.timestamp >= (select date from days_back)
+  group by date(r.timestamp)
   union all
   select
     'HRD' as label,
-    chanel as origin,
-    date(timestamp) as 'date',
-    count(id) as total,
-    sum(next_sequence_count-last_sequence_count),
-    sum(strftime('%s', next_timestamp) - strftime('%s', last_timestamp)) as duration
-  from hrd_packet_gap
-  where next_timestamp > last_timestamp
-    and hrd_packet_gap.timestamp >= (select date from days_back)
-  group by date(timestamp), chanel
+    h.chanel as origin,
+    date(h.timestamp) as 'date',
+    count(h.id) as total,
+    sum(h.next_sequence_count-h.last_sequence_count),
+    sum(strftime('%s', h.next_timestamp) - strftime('%s', h.last_timestamp)) as duration
+  from hrd_packet_gap h
+  where h.next_timestamp > h.last_timestamp
+    and h.timestamp >= (select date from days_back)
+  group by date(h.timestamp), h.chanel
   union all
   select
     'VMU' as label,
     r.source as origin,
     date(g.timestamp) as 'date',
     count(g.id) as total,
-    sum(next_sequence_count-last_sequence_count),
-    sum(strftime('%s', next_timestamp) - strftime('%s', last_timestamp)) as duration
+    sum(g.next_sequence_count-g.last_sequence_count),
+    sum(strftime('%s', g.next_timestamp) - strftime('%s', g.last_timestamp)) as duration
   from vmu_packet_gap as g
     inner join vmu_record as r on g.vmu_record_id=r.id
-  where next_timestamp > last_timestamp
+  where g.next_timestamp > g.last_timestamp
     and g.timestamp >= (select date from days_back)
-  group by date(timestamp), r.source;
+  group by date(g.timestamp), r.source;
 
 create view jobs_status as
 select

@@ -45,7 +45,7 @@ func NewDBStore(addr, name, user, passwd string, mon Monitor) (Store, error) {
 }
 
 func (s DBStore) Status() (interface{}, error) {
-	where := quel.Equal(quel.Func("date", quel.NewIdent("timestamp")), quel.NewIdent("current_date"))
+	where := quel.Equal(quel.Func("date", quel.NewIdent("timestamp", "r")), quel.NewIdent("current_date"))
 	status := map[string]interface{}{
 		"autobrm": s.mon.readProcess(),
 		"requests": map[string]interface{}{
